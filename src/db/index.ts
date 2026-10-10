@@ -18,7 +18,7 @@ const migrationsFolder = path.join(process.cwd(), "drizzle");
 async function createDb(): Promise<Db> {
   const url = process.env.DATABASE_URL;
   if (url) {
-    const pool = new Pool({ connectionString: url, max: 5 });
+    const pool = new Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_MAX ?? 3) });
     const db = drizzlePg(pool, { schema });
     await migratePg(db, { migrationsFolder });
     // Both drivers expose the same query builder API; the type difference is only in driver internals.

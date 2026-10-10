@@ -35,10 +35,19 @@ npm run lint
 npx tsc --noEmit
 ```
 
-## Deploying (free tiers)
+## Free test site (Vercel + Neon)
 
-1. Create a free Postgres database (Neon or Supabase) and set `DATABASE_URL`. Migrations run automatically on start.
-2. Deploy to Vercel (or any Node host) with `SESSION_SECRET`, `ADMIN_PHONES` and the Africa's Talking settings from `.env.example`.
+1. Merge this code into `main` (Vercel deploys `main`).
+2. Sign up at https://vercel.com with your GitHub account (Hobby plan, free).
+3. **Add New → Project**, import `G-Money`, and add these environment variables before deploying:
+   - `SESSION_SECRET`: any 40+ random characters
+   - `ADMIN_PHONES`: your phone number, e.g. `0712345678`
+   - `OTP_DEV_MODE`: `true` (sign-in codes appear on screen, so no SMS account is needed)
+   - `SITE_PASSWORD`: a password you'll share with testers (required while `OTP_DEV_MODE` is on, otherwise anyone could sign in as any number)
+4. In the project, open **Storage → Create Database → Neon** (free plan) and connect it to the project. This sets `DATABASE_URL`.
+5. **Deployments → Redeploy**. Database tables are created automatically on first use.
+
+For a real launch, turn `OTP_DEV_MODE` off, add the Africa's Talking SMS settings and remove `SITE_PASSWORD`.
 
 After changing `src/db/schema.ts`, generate a migration with `npm run db:generate`.
 
