@@ -11,6 +11,10 @@ import { UserError } from "@/lib/errors";
 import { startPuzzleAttempt, submitPuzzleAttempt, type AttemptResult } from "@/lib/puzzles";
 import { endSession, getCurrentUser, requireAdmin, requireUser, startSession } from "@/lib/session";
 import * as tournaments from "@/lib/tournaments";
+import { simulatePayment, startPayment, refreshPayment } from "@/lib/shop/checkout";
+import * as shop from "@/lib/shop/orders";
+import { getSupplier } from "@/lib/shop/suppliers";
+import { orders } from "@/db/schema";
 
 export type ActionState = { error?: string; message?: string; devCode?: string; phone?: string } | undefined;
 
@@ -57,7 +61,8 @@ export async function verifyCodeAction(_: ActionState, form: FormData): Promise<
     await startSession(user.id);
   });
   if (result?.error) return { ...result, phone: str(form, "phone") };
-  redirect("/profile");
+  const next = str(form, "next");
+  redirect(/^\/(?![\/\\])/.test(next) ? next : "/profile");
 }
 
 export async function signOutAction() {
@@ -209,6 +214,8 @@ export async function createTournamentAction(_: ActionState, form: FormData): Pr
       startsAt: nairobiDate(str(form, "startsAt")) ?? new Date(),
       endsAt: nairobiDate(str(form, "endsAt")),
       rules: str(form, "rules"),
+      prizeProductId: str(form, "prizeProductId") || undefined,
+      prizeCardValues: str(form, "prizeCardValues") || undefined,
     });
     id = t.id;
   });
@@ -265,5 +272,128 @@ export async function banUserAction(_: ActionState, form: FormData): Promise<Act
       .where(eq(users.id, target.id));
     revalidatePath("/admin");
     return { message: unban ? `${username} unbanned` : `${username} suspended` };
+  });
+}
+
+// ---------------------------------------------------------------- shop
+
+export async function buyAction(productId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  let target = "";
+  const result = await run(async () => {
+    const user = await getCurrentUser();
+    if (!user) redirect(`/login?next=/shop/${productId}`);
+    const db = await getDb();
+    const method = str(form, "method") === "card" ? "card" : "mpesa";
+    const order = await shop.createOrder(
+      db,
+      user,
+      { productId, faceCents: Number(str(form, "faceCents")), method, email: str(form, "email") },
+      getSupplier().name,
+    );
+    try {
+      const { redirectUrl } = await startPayment(db, order, user);
+      target = redirectUrl ?? `/orders/${order.id}`;
+    } catch (err) {
+      await shop.cancelUnpaidOrder(db, order.id, err instanceof Error ? err.message : "Payment could not start");
+      if (err instanceof UserError) throw err;
+      throw new UserError("The payment could not start. Please try again.");
+    }
+  });
+  if (result?.error) return result;
+  redirect(target);
+}
+
+async function ownOrder(orderId: string) {
+  const user = await requireUser();
+  const db = await getDb();
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!order || order.userId !== user.id) throw new UserError("Order not found");
+  return { user, db, order };
+}
+
+export async function checkPaymentAction(orderId: string): Promise<ActionState> {
+  return run(async () => {
+    const { db, order } = await ownOrder(orderId);
+    await refreshPayment(db, order);
+    revalidatePath(`/orders/${orderId}`);
+    return { message: "Checked" };
+  });
+}
+
+export async function cancelOrderAction(orderId: string): Promise<ActionState> {
+  return run(async () => {
+    const { db, order } = await ownOrder(orderId);
+    await refreshPayment(db, order);
+    await shop.cancelUnpaidOrder(db, order.id, "Cancelled by buyer");
+    revalidatePath(`/orders/${orderId}`);
+    return { message: "Order cancelled" };
+  });
+}
+
+export async function simulatePaymentAction(orderId: string, outcome: "paid" | "failed"): Promise<ActionState> {
+  return run(async () => {
+    const user = await requireUser();
+    await simulatePayment(await getDb(), user, orderId, outcome);
+    revalidatePath(`/orders/${orderId}`);
+    return { message: outcome === "paid" ? "Test payment made" : "Test payment declined" };
+  });
+}
+
+// ---------------------------------------------------------------- shop admin
+
+export async function setRateAction(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    await shop.setUsdKesRate(await getDb(), admin, Number(str(form, "rate")));
+    revalidatePath("/", "layout");
+    return { message: "Rate saved. Shop prices now use it." };
+  });
+}
+
+export async function syncProductsAction(): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    const n = await shop.syncProducts(await getDb(), admin, getSupplier());
+    revalidatePath("/admin/shop");
+    return { message: `${n} cards loaded from the supplier. New ones stay hidden until you switch them on.` };
+  });
+}
+
+export async function toggleProductAction(productId: string, enabled: boolean): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    await shop.setProductEnabled(await getDb(), admin, productId, enabled);
+    revalidatePath("/", "layout");
+    return { message: enabled ? "Now on sale" : "Hidden from the shop" };
+  });
+}
+
+export async function adminOrderAction(orderId: string, op: "approve" | "send" | "recheck", _?: ActionState, form?: FormData): Promise<ActionState> {
+  void form;
+  return run(async () => {
+    const admin = await requireAdmin();
+    const db = await getDb();
+    const supplier = getSupplier();
+    let order;
+    if (op === "approve") {
+      await shop.approveHeldOrder(db, admin, orderId);
+      order = await shop.fulfilOrder(db, orderId, supplier);
+    } else if (op === "send") {
+      order = await shop.fulfilOrder(db, orderId, supplier);
+    } else {
+      order = await shop.recheckOrder(db, admin, orderId, supplier);
+    }
+    revalidatePath("/admin/shop");
+    if (order.status === "delivered") return { message: "Card delivered" };
+    return { error: `Not delivered: ${order.failureReason ?? order.status}` };
+  });
+}
+
+export async function refundOrderAction(orderId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    await shop.markRefunded(await getDb(), admin, orderId, str(form, "note"));
+    revalidatePath("/admin/shop");
+    return { message: "Marked as refunded" };
   });
 }

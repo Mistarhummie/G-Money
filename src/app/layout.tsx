@@ -9,8 +9,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "G-Money: skill tournaments",
-  description: "Fair, skill-based gaming tournaments for Kenyan gamers.",
+  title: "G-Money: gaming gift cards",
+  description: "Gaming gift cards paid with M-Pesa, plus skill tournaments for Kenyan gamers.",
   manifest: "/manifest.webmanifest",
 };
 
@@ -26,8 +26,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/" className="mr-auto text-lg font-bold tracking-tight">
               G<span className="text-emerald-400">-Money</span>
             </Link>
-            <Link href="/" className="text-white/80 hover:text-white">Tournaments</Link>
+            <Link href="/" className="text-white/80 hover:text-white">Shop</Link>
+            <Link href="/tournaments" className="text-white/80 hover:text-white">Tournaments</Link>
             <Link href="/play/puzzle" className="text-white/80 hover:text-white">Practice</Link>
+            {user && <Link href="/orders" className="text-white/80 hover:text-white">My orders</Link>}
             {user?.isAdmin && <Link href="/admin" className="text-amber-300 hover:text-amber-200">Admin</Link>}
             {user ? (
               <>
@@ -48,7 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         )}
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
         <footer className="border-t border-white/10 px-4 py-6 text-center text-xs text-white/50">
-          Skill games only. No bots, and G-Money never plays against you. 18+.
+          Gift cards from authorised distributors. Tournaments are skill games only. 18+.
         </footer>
       </body>
     </html>

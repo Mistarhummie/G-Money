@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { sendCodeAction, verifyCodeAction } from "../actions";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string }) {
   const [sent, sendAction, sending] = useActionState(sendCodeAction, undefined);
   const [verified, verifyAction, verifying] = useActionState(verifyCodeAction, undefined);
   const phone = sent?.phone;
@@ -24,6 +24,7 @@ export function LoginForm() {
   return (
     <form action={verifyAction} className="flex flex-col gap-3">
       <input type="hidden" name="phone" value={phone} />
+      <input type="hidden" name="next" value={next} />
       <p className="text-sm text-white/80">Code sent to {phone}.</p>
       {sent.devCode && (
         <p className="rounded-lg bg-amber-500/15 p-2 text-sm text-amber-200">Test mode: your code is {sent.devCode}</p>

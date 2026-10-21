@@ -4,6 +4,7 @@ import {
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -76,6 +77,9 @@ export const tournaments = pgTable("tournaments", {
   attemptsPerPlayer: integer("attempts_per_player").notNull().default(3),
   status: text("status").$type<TournamentStatus>().notNull().default("open"),
   rules: text("rules"),
+  // Gift card prize tournaments: the product and face value (in the card's currency, cents) per finishing place.
+  prizeProductId: text("prize_product_id"),
+  prizeFaceValuesCents: jsonb("prize_face_values_cents").$type<number[]>(),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }),
   createdBy: text("created_by")
@@ -196,8 +200,95 @@ export const ledgerEntries = pgTable(
   (t) => [index("ledger_account_idx").on(t.account)],
 );
 
+// ---------------------------------------------------------------- shop
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Denomination = {
+  /** Face value in the card's own currency, in cents (e.g. 1000 = $10). */
+  faceCents: number;
+  /** What the supplier charges us, in USD cents. */
+  costUsdCents: number;
+};
+
+export const products = pgTable(
+  "products",
+  {
+    id: id(),
+    supplier: text("supplier").notNull(),
+    supplierProductId: text("supplier_product_id").notNull(),
+    brand: text("brand").notNull(),
+    name: text("name").notNull(),
+    // Region the card works in, e.g. US.
+    countryCode: text("country_code").notNull(),
+    currency: text("currency").notNull(),
+    denominations: jsonb("denominations").$type<Denomination[]>().notNull(),
+    logoUrl: text("logo_url"),
+    redeemInstructions: text("redeem_instructions"),
+    enabled: boolean("enabled").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("products_supplier_idx").on(t.supplier, t.supplierProductId)],
+);
+
+export type OrderStatus =
+  | "pending_payment"
+  | "held" // paid, waiting for admin approval (fraud check)
+  | "paid" // paid, ready to send to the supplier
+  | "fulfilling"
+  | "delivered"
+  | "failed" // supplier refused; needs a refund
+  | "needs_check" // supplier result unknown (e.g. timeout); check before retrying
+  | "cancelled"
+  | "refunded";
+
+export type PaymentMethod = "mpesa" | "card" | "prize";
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    faceCents: integer("face_cents").notNull(),
+    costUsdCents: integer("cost_usd_cents").notNull(),
+    priceKes: integer("price_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    totalKes: integer("total_kes").notNull(),
+    method: text("method").$type<PaymentMethod>().notNull(),
+    status: text("status").$type<OrderStatus>().notNull().default("pending_payment"),
+    paymentRef: text("payment_ref"),
+    paymentReceipt: text("payment_receipt"),
+    payerEmail: text("payer_email"),
+    heldReason: text("held_reason"),
+    failureReason: text("failure_reason"),
+    supplierTxId: text("supplier_tx_id"),
+    codeEncrypted: text("code_encrypted"),
+    pinEncrypted: text("pin_encrypted"),
+    tournamentId: text("tournament_id").references(() => tournaments.id),
+    createdAt: createdAt(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("orders_user_idx").on(t.userId, t.createdAt),
+    index("orders_status_idx").on(t.status),
+    uniqueIndex("orders_payment_ref_idx").on(t.paymentRef),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Tournament = typeof tournaments.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type Dispute = typeof disputes.$inferSelect;
 export type PuzzleAttempt = typeof puzzleAttempts.$inferSelect;
+export type Product = typeof products.$inferSelect;
+export type Order = typeof orders.$inferSelect;

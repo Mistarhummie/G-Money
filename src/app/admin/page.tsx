@@ -3,7 +3,8 @@ import Link from "next/link";
 import { ActionForm } from "@/components/ActionForm";
 import { Card, StatusBadge, gameName, kes, nairobiTime } from "@/components/ui";
 import { getDb } from "@/db";
-import { disputes, evidence, matches, puzzleAttempts, tournaments, users } from "@/db/schema";
+import { disputes, evidence, matches, products, puzzleAttempts, tournaments, users } from "@/db/schema";
+import { formatFace } from "@/lib/shop/pricing";
 import { config } from "@/lib/config";
 import { requireAdmin } from "@/lib/session";
 import { prizesOwed } from "@/lib/tournaments";
@@ -51,10 +52,14 @@ export default async function AdminPage() {
     .where(and(eq(puzzleAttempts.flagged, true)))
     .orderBy(desc(puzzleAttempts.startedAt))
     .limit(20);
+  const prizeProducts = await db.select().from(products).orderBy(products.brand, products.name);
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-2xl font-bold">Admin</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Tournament admin</h1>
+        <Link href="/admin/shop" className="btn-secondary">Shop admin</Link>
+      </div>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold">Disputes ({openDisputes.length})</h2>
@@ -205,6 +210,21 @@ export default async function AdminPage() {
             <label className="label">
               Ends (Kenya time, puzzle only)
               <input name="endsAt" type="datetime-local" className="input" />
+            </label>
+            <label className="label">
+              Gift card prize (optional)
+              <select name="prizeProductId" className="input" defaultValue="">
+                <option value="">No gift card prize</option>
+                {prizeProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.denominations.map((d) => formatFace(d.faceCents, p.currency)).join(", ")})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="label">
+              Card value per place, e.g. 25,10
+              <input name="prizeCardValues" className="input" placeholder="1st, 2nd, 3rd…" />
             </label>
             <label className="label sm:col-span-2">
               Rules

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
@@ -16,7 +17,8 @@ const migrationsFolder = path.join(process.cwd(), "drizzle");
  * Without it, runs an embedded Postgres (PGlite) stored in .data/ so local development needs no setup.
  */
 async function createDb(): Promise<Db> {
-  const url = process.env.DATABASE_URL;
+  // Vercel's Neon integration names the variable after the prefix chosen when connecting (DATABASE_ or STORAGE_).
+  const url = process.env.DATABASE_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL;
   if (url) {
     const pool = new Pool({ connectionString: url, max: Number(process.env.DATABASE_POOL_MAX ?? 3) });
     const db = drizzlePg(pool, { schema });
@@ -25,6 +27,7 @@ async function createDb(): Promise<Db> {
     return db as unknown as Db;
   }
   const dataDir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
+  mkdirSync(path.dirname(dataDir), { recursive: true });
   return createPgliteDb(dataDir);
 }
 
@@ -38,7 +41,11 @@ export async function createPgliteDb(dataDir?: string): Promise<Db> {
 const globalForDb = globalThis as unknown as { gmoneyDb?: Promise<Db> };
 
 export function getDb(): Promise<Db> {
-  globalForDb.gmoneyDb ??= createDb();
+  // A failed connection is forgotten so the next request tries again instead of failing forever.
+  globalForDb.gmoneyDb ??= createDb().catch((err) => {
+    globalForDb.gmoneyDb = undefined;
+    throw err;
+  });
   return globalForDb.gmoneyDb;
 }
 

@@ -8,6 +8,8 @@ import {
   evidence,
   ledgerEntries,
   matches,
+  orders,
+  products,
   puzzleAttempts,
   tournaments,
   users,
@@ -40,6 +42,9 @@ export const createTournamentSchema = z.object({
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date().optional(),
   rules: z.string().trim().max(2000).optional(),
+  // Optional gift card prize: a shop product and the card value per place, e.g. "25,10" for $25 then $10.
+  prizeProductId: z.string().trim().optional(),
+  prizeCardValues: z.string().trim().optional(),
 });
 
 export type CreateTournamentInput = z.input<typeof createTournamentSchema>;
@@ -57,6 +62,7 @@ export async function createTournament(db: Db, admin: User, input: CreateTournam
   const format = GAMES[data.game].format;
   if (format === "leaderboard" && !data.endsAt) throw new UserError("Leaderboard tournaments need an end time");
   if (data.endsAt && data.endsAt <= data.startsAt) throw new UserError("End time must be after the start time");
+  const cardPrize = await parseCardPrize(db, data.prizeProductId, data.prizeCardValues);
 
   const [created] = await db
     .insert(tournaments)
@@ -72,10 +78,30 @@ export async function createTournament(db: Db, admin: User, input: CreateTournam
       startsAt: data.startsAt,
       endsAt: data.endsAt ?? null,
       rules: data.rules || null,
+      prizeProductId: cardPrize?.productId ?? null,
+      prizeFaceValuesCents: cardPrize?.faceValuesCents ?? null,
       createdBy: admin.id,
     })
     .returning();
   return created;
+}
+
+async function parseCardPrize(db: Db, productId?: string, values?: string) {
+  if (!productId) return null;
+  const [product] = await db.select().from(products).where(eq(products.id, productId));
+  if (!product) throw new UserError("Gift card prize: product not found");
+  const faceValuesCents = (values ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map((v) => Math.round(Number(v) * 100));
+  if (!faceValuesCents.length) throw new UserError("Gift card prize: enter the card value for each place, e.g. 25,10");
+  for (const face of faceValuesCents) {
+    if (!product.denominations.some((d) => d.faceCents === face)) {
+      throw new UserError(`Gift card prize: ${product.name} does not come in ${face / 100}`);
+    }
+  }
+  return { productId, faceValuesCents };
 }
 
 // ---------------------------------------------------------------- joining
@@ -495,7 +521,39 @@ async function settle(tx: Exec, t: Tournament, ranking: string[][], now: Date) {
     if (pool.platformFeeKes > 0) rows.push({ txId, account: "platform:fees", amountKes: pool.platformFeeKes, memo: `Fee: ${t.title}`, createdAt: now });
     await tx.insert(ledgerEntries).values(rows);
   }
+  await createCardPrizeOrders(tx, t, ranking, now);
   await tx.update(tournaments).set({ status: "completed", endsAt: t.endsAt ?? now }).where(eq(tournaments.id, t.id));
+}
+
+/**
+ * Gift card prizes become orders waiting for the admin to send them. Tied players each get
+ * the card for the place they share.
+ */
+async function createCardPrizeOrders(tx: Exec, t: Tournament, ranking: string[][], now: Date) {
+  if (!t.prizeProductId || !t.prizeFaceValuesCents?.length) return;
+  const [product] = await tx.select().from(products).where(eq(products.id, t.prizeProductId));
+  if (!product) return;
+  const faces = t.prizeFaceValuesCents;
+  for (let i = 0; i < faces.length && i < ranking.length; i++) {
+    const denom = product.denominations.find((d) => d.faceCents === faces[i]);
+    if (!denom) continue;
+    for (const userId of ranking[i] ?? []) {
+      await tx.insert(orders).values({
+        userId,
+        productId: product.id,
+        faceCents: denom.faceCents,
+        costUsdCents: denom.costUsdCents,
+        priceKes: 0,
+        totalKes: 0,
+        method: "prize",
+        status: "held",
+        heldReason: `Prize for place ${i + 1} in ${t.title}`,
+        tournamentId: t.id,
+        createdAt: now,
+        paidAt: now,
+      });
+    }
+  }
 }
 
 export async function cancelTournament(db: Db, admin: User, tournamentId: string): Promise<void> {

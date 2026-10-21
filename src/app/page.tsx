@@ -1,62 +1,76 @@
-import { desc, inArray, sql } from "drizzle-orm";
 import Link from "next/link";
+import { BrandTile, Card, kes } from "@/components/ui";
 import { getDb } from "@/db";
-import { entries, tournaments } from "@/db/schema";
-import { Card, StatusBadge, gameName, kes, nairobiTime } from "@/components/ui";
+import { formatFace } from "@/lib/shop/pricing";
+import { catalog } from "@/lib/shop/orders";
+import { getSupplier } from "@/lib/shop/suppliers";
+import { getCurrentUser } from "@/lib/session";
 
-export default async function Home() {
+export default async function ShopHome() {
   const db = await getDb();
-  const list = await db
-    .select({
-      t: tournaments,
-      players: sql<number>`(select count(*)::int from ${entries} where ${entries.tournamentId} = ${tournaments.id})`,
-    })
-    .from(tournaments)
-    .where(inArray(tournaments.status, ["open", "running", "completed"]))
-    .orderBy(sql`case ${tournaments.status} when 'running' then 0 when 'open' then 1 else 2 end`, desc(tournaments.startsAt))
-    .limit(30);
+  const [items, user] = await Promise.all([catalog(db, getSupplier().name), getCurrentUser()]);
 
   return (
     <div className="flex flex-col gap-8">
       <section className="rounded-3xl bg-gradient-to-br from-emerald-600/30 to-emerald-900/10 p-6 sm:p-10">
-        <h1 className="text-3xl font-bold sm:text-4xl">Play. Win. Get paid.</h1>
+        <h1 className="text-3xl font-bold sm:text-4xl">Gaming gift cards, paid with M-Pesa.</h1>
         <p className="mt-3 max-w-xl text-white/80">
-          Skill tournaments for eFootball, EA FC, chess and our own speed puzzle. Results are checked, prizes go out over M-Pesa,
-          and every dispute is reviewed with evidence.
+          PlayStation, Xbox, Steam, Google Play and more. Pay in shillings and your code shows up here in seconds. It is also kept
+          safe in My orders.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link href="/play/puzzle" className="btn-primary">Try the speed puzzle</Link>
-          <Link href="/login" className="btn-secondary">Create an account</Link>
+          <a href="#cards" className="btn-primary">Browse cards</a>
+          <Link href="/tournaments" className="btn-secondary">Play tournaments</Link>
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-xl font-semibold">Tournaments</h2>
-        {list.length === 0 ? (
-          <Card>No tournaments yet. Check back soon.</Card>
+      <section id="cards">
+        <h2 className="mb-3 text-xl font-semibold">Gift cards</h2>
+        {items.length === 0 ? (
+          <Card>
+            The shop opens soon.
+            {user?.isAdmin && (
+              <>
+                {" "}
+                Set the dollar rate and switch cards on in <Link href="/admin/shop" className="text-emerald-300 underline">shop admin</Link>.
+              </>
+            )}
+          </Card>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {list.map(({ t, players }) => (
-              <Link key={t.id} href={`/tournaments/${t.id}`}>
-                <Card className="h-full transition hover:border-emerald-400/50">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold">{t.title}</h3>
-                    <StatusBadge status={t.status} />
-                  </div>
-                  <p className="mt-1 text-sm text-white/70">{gameName(t)}</p>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/80">
-                    <span>{t.entryType === "free" ? "Free entry" : `Entry ${kes(t.entryFeeKes)}`}</span>
-                    {t.sponsoredPrizeKes > 0 && <span>Prize {kes(t.sponsoredPrizeKes)}</span>}
-                    <span>
-                      {players}/{t.maxPlayers} players
-                    </span>
-                    <span>{nairobiTime(t.startsAt)}</span>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {items.map((p) => {
+              const from = Math.min(...p.prices.map((x) => x.priceKes));
+              const faces = p.prices.map((x) => formatFace(x.faceCents, p.currency));
+              return (
+                <Link key={p.id} href={`/shop/${p.id}`}>
+                  <Card className="flex h-full flex-col gap-2 !p-3 transition hover:border-emerald-400/50">
+                    <BrandTile brand={p.brand} logoUrl={p.logoUrl} />
+                    <h3 className="text-sm font-semibold leading-tight">{p.name}</h3>
+                    <p className="text-xs text-white/60">
+                      {p.countryCode} cards · {faces[0]} to {faces[faces.length - 1]}
+                    </p>
+                    <p className="mt-auto text-sm font-medium text-emerald-300">From {kes(from)}</p>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         )}
+      </section>
+
+      <section className="grid gap-3 text-sm sm:grid-cols-3">
+        <Card>
+          <h3 className="font-semibold">Instant codes</h3>
+          <p className="mt-1 text-white/70">Most orders are delivered as soon as M-Pesa confirms the payment.</p>
+        </Card>
+        <Card>
+          <h3 className="font-semibold">Real, licensed cards</h3>
+          <p className="mt-1 text-white/70">Every card comes from an authorised distributor, never from resellers.</p>
+        </Card>
+        <Card>
+          <h3 className="font-semibold">Check the region</h3>
+          <p className="mt-1 text-white/70">Cards only work in their region. US cards need a US account on PlayStation, Xbox or Steam.</p>
+        </Card>
       </section>
     </div>
   );

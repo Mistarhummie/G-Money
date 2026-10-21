@@ -7,6 +7,8 @@ import { NextResponse, type NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const password = process.env.SITE_PASSWORD;
   if (!password) return NextResponse.next();
+  // Safaricom and Paystack cannot type the password; these routes check their own secrets.
+  if (request.nextUrl.pathname.startsWith("/api/payments/")) return NextResponse.next();
 
   const header = request.headers.get("authorization") ?? "";
   if (header.startsWith("Basic ")) {
