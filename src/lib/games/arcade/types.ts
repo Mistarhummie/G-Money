@@ -41,6 +41,8 @@ export type ArcadeGame = {
   /** A session left open longer than this no longer counts. */
   timeLimitMs: number;
   verify(args: VerifyArgs): Verdict;
+  /** Turn-based games two people can play against each other. Solo games use head-to-head races instead. */
+  pvp?: PvpRules;
 };
 
 /** Props every game's browser component takes. */
@@ -53,3 +55,40 @@ export type GameComponentProps = {
 };
 
 export const invalid = (detail: string): Verdict => ({ valid: false, cleared: false, score: 0, flagged: false, detail });
+
+// ---------------------------------------------------------------- player vs player
+
+/** Where a two-player game stands after replaying its moves. Sides are 0 (moves first) and 1. */
+export type PvpState = {
+  /** Side to move next (for pool, the side at the table). Meaningless once over. */
+  turn: 0 | 1;
+  over: boolean;
+  /** null while playing, or for a draw. */
+  winner: 0 | 1 | null;
+  /** Short result text, e.g. "Checkmate", "Draw by repetition". */
+  detail?: string;
+};
+
+/**
+ * Rules for two people playing each other. The server stores only the move list and checks every
+ * new move by replaying the whole game, so both players always see the same position.
+ */
+export type PvpRules = {
+  /** Replays the moves from the starting position for `seed`. Returns null if any move is illegal or comes after the end. */
+  replay(seed: number, moves: string[]): PvpState | null;
+  /** Longest a single move string may be. */
+  maxMoveLength: number;
+};
+
+/** Props for a game's two-player board. The page polls the server and passes the latest moves. */
+export type PvpBoardProps = {
+  seed: number;
+  moves: string[];
+  /** Which side this viewer plays; null for spectators. */
+  mySide: 0 | 1 | null;
+  names: [string, string];
+  /** Sends a move; only called on the viewer's own turn. The board shows it optimistically. */
+  onMove: (move: string) => void;
+  /** True while a move is being sent or the game is over. */
+  disabled: boolean;
+};
