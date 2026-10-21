@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { firstRoundPairings, nextMatchPosition, seedOrder } from "@/lib/bracket";
-import { boardFromSeed, inverse, isSolved, moveForTile, replay, shufflePath } from "@/lib/games/puzzle15";
+import { boardFromSeed, inverse, isSolved, moveForTile, shufflePath, slide } from "@/lib/games/arcade/slide";
 import { parseLichessGameId, checkChessGame, type LichessGame } from "@/lib/lichess";
 import { computePrizePool, distributePrizes, payoutSplit } from "@/lib/payouts";
 import { normaliseKenyanPhone } from "@/lib/phone";
@@ -41,23 +41,33 @@ describe("payouts", () => {
   });
 });
 
-describe("puzzle15", () => {
+describe("sliding puzzle", () => {
   it("makes the same board from the same seed, and it is not already solved", () => {
-    expect(boardFromSeed(42)).toEqual(boardFromSeed(42));
-    expect(isSolved(boardFromSeed(42))).toBe(false);
+    expect(boardFromSeed(42, 4)).toEqual(boardFromSeed(42, 4));
+    expect(isSolved(boardFromSeed(42, 4))).toBe(false);
+    expect(boardFromSeed(42, 3)).toHaveLength(9);
   });
 
   it("accepts a real solution and rejects junk", () => {
-    expect(replay(42, inverse(shufflePath(42)))).toEqual({ solved: true, moveCount: 400 });
-    expect(replay(42, "").solved).toBe(false);
-    expect(replay(42, "XYZ").error).toBe("Invalid moves");
+    const solution = inverse(shufflePath(42, 4));
+    expect(slide.verify({ seed: 42, stage: 3, input: solution, elapsedMs: 120_000 })).toMatchObject({ valid: true, cleared: true, flagged: false });
+    expect(slide.verify({ seed: 42, stage: 3, input: "", elapsedMs: 1000 })).toMatchObject({ valid: true, cleared: false });
+    expect(slide.verify({ seed: 42, stage: 3, input: "XYZ", elapsedMs: 1000 }).valid).toBe(false);
+    // 400 moves in 5 seconds is not humanly possible.
+    expect(slide.verify({ seed: 42, stage: 3, input: solution, elapsedMs: 5000 }).flagged).toBe(true);
+  });
+
+  it("enforces the sprint stage time limit", () => {
+    const solution = inverse(shufflePath(7, 3));
+    expect(slide.verify({ seed: 7, stage: 2, input: solution, elapsedMs: 40_000 }).cleared).toBe(true);
+    expect(slide.verify({ seed: 7, stage: 2, input: solution, elapsedMs: 50_000 }).cleared).toBe(false);
   });
 
   it("maps a tapped tile to a move", () => {
     const solved = [...Array.from({ length: 15 }, (_, i) => i + 1), 0];
-    expect(moveForTile(solved, 14)).toBe("L");
-    expect(moveForTile(solved, 11)).toBe("U");
-    expect(moveForTile(solved, 0)).toBeNull();
+    expect(moveForTile(solved, 4, 14)).toBe("L");
+    expect(moveForTile(solved, 4, 11)).toBe("U");
+    expect(moveForTile(solved, 4, 0)).toBeNull();
   });
 });
 

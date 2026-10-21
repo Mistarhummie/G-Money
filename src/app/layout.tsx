@@ -28,7 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Link>
             <Link href="/" className="text-white/80 hover:text-white">Shop</Link>
             <Link href="/tournaments" className="text-white/80 hover:text-white">Tournaments</Link>
-            <Link href="/play/puzzle" className="text-white/80 hover:text-white">Practice</Link>
+            <Link href="/play" className="text-white/80 hover:text-white">Games</Link>
             {user && <Link href="/orders" className="text-white/80 hover:text-white">My orders</Link>}
             {user?.isAdmin && <Link href="/admin" className="text-amber-300 hover:text-amber-200">Admin</Link>}
             {user ? (

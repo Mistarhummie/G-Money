@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createPgliteDb, type Db } from "@/db";
 import { disputes, entries, matches, users, type User } from "@/db/schema";
 import { requestOtp, verifyOtp } from "@/lib/auth";
-import { inverse, shufflePath } from "@/lib/games/puzzle15";
+import { inverse, shufflePath } from "@/lib/games/arcade/slide";
 import type { LichessGame } from "@/lib/lichess";
-import { startPuzzleAttempt, submitPuzzleAttempt } from "@/lib/puzzles";
+import { startSession, submitSession } from "@/lib/arcade";
 import {
   accountBalance,
   applyAutoConfirms,
@@ -187,12 +187,13 @@ describe("chess via Lichess", () => {
   });
 });
 
-describe("speed puzzle leaderboard", () => {
+describe("own-game leaderboard", () => {
   it("only counts real solutions, timed by the server", async () => {
     const admin = await makeUser({ isAdmin: true });
     const t = await createTournament(db, admin, {
       title: "Puzzle sprint",
-      game: "puzzle15",
+      game: "slide",
+      stage: 3,
       entryType: "free",
       entryFeeKes: 0,
       sponsoredPrizeKes: 1000,
@@ -205,23 +206,25 @@ describe("speed puzzle leaderboard", () => {
     const slow = await makeUser();
     const bot = await makeUser();
     for (const p of [fast, slow, bot]) await joinTournament(db, p, t.id);
-    await expect(startPuzzleAttempt(db, fast, t.id, T0)).rejects.toThrow("not open");
+    await expect(startSession(db, fast, { game: "slide", tournamentId: t.id }, T0)).rejects.toThrow("not open");
     await startTournament(db, admin, t.id, T0);
 
     const solve = async (u: User, startMin: number, seconds: number) => {
-      const { attemptId, seed } = await startPuzzleAttempt(db, u, t.id, minutes(startMin));
-      return submitPuzzleAttempt(db, u, attemptId, inverse(shufflePath(seed)), new Date(minutes(startMin).getTime() + seconds * 1000));
+      // The stage asked for is ignored: tournament attempts play the tournament's stage.
+      const { sessionId, seed, stage } = await startSession(db, u, { game: "slide", stage: 1, tournamentId: t.id }, minutes(startMin));
+      expect(stage).toBe(3);
+      return submitSession(db, u, sessionId, inverse(shufflePath(seed, 4)), new Date(minutes(startMin).getTime() + seconds * 1000));
     };
 
-    expect(await solve(fast, 1, 90)).toMatchObject({ solved: true, flagged: false, timeMs: 90_000 });
-    expect(await solve(slow, 2, 200)).toMatchObject({ solved: true, flagged: false });
+    expect(await solve(fast, 1, 90)).toMatchObject({ cleared: true, flagged: false, timeMs: 90_000 });
+    expect(await solve(slow, 2, 200)).toMatchObject({ cleared: true, flagged: false });
     // 400 moves in 5 seconds is not humanly possible.
-    expect(await solve(bot, 3, 5)).toMatchObject({ solved: true, flagged: true });
+    expect(await solve(bot, 3, 5)).toMatchObject({ cleared: true, flagged: true });
 
     // Junk moves do not count.
-    const { attemptId } = await startPuzzleAttempt(db, slow, t.id, minutes(10));
-    expect(await submitPuzzleAttempt(db, slow, attemptId, "UUUU", minutes(11))).toMatchObject({ solved: false });
-    await expect(startPuzzleAttempt(db, slow, t.id, minutes(12))).rejects.toThrow("all 2 attempts");
+    const { sessionId } = await startSession(db, slow, { game: "slide", tournamentId: t.id }, minutes(10));
+    expect(await submitSession(db, slow, sessionId, "UUUU", minutes(11))).toMatchObject({ cleared: false });
+    await expect(startSession(db, slow, { game: "slide", tournamentId: t.id }, minutes(12))).rejects.toThrow("all 2 attempts");
 
     const board = await leaderboard(db, t.id);
     expect(board.map((r) => r.userId)).toEqual([fast.id, slow.id]);
@@ -229,5 +232,24 @@ describe("speed puzzle leaderboard", () => {
     await finishLeaderboard(db, admin, t.id, minutes(100));
     const [first] = await db.select().from(entries).where(eq(entries.userId, fast.id));
     expect(first).toMatchObject({ finalRank: 1, prizeKes: 1000 });
+  });
+});
+
+describe("stages", () => {
+  it("unlocks the next stage only after clearing the one before", async () => {
+    const u = await makeUser();
+    await expect(startSession(db, u, { game: "slide", stage: 2 })).rejects.toThrow("Clear stage 1 first");
+    const { sessionId, seed } = await startSession(db, u, { game: "slide", stage: 1 }, T0);
+    const res = await submitSession(db, u, sessionId, inverse(shufflePath(seed, 3)), minutes(1));
+    expect(res).toMatchObject({ cleared: true, unlockedStage: 2 });
+    await expect(startSession(db, u, { game: "slide", stage: 2 })).resolves.toMatchObject({ stage: 2 });
+    await expect(startSession(db, u, { game: "slide", stage: 3 })).rejects.toThrow("Clear stage 2 first");
+  });
+
+  it("will not accept the same game twice", async () => {
+    const u = await makeUser();
+    const { sessionId, seed } = await startSession(db, u, { game: "slide", stage: 1 }, T0);
+    await submitSession(db, u, sessionId, inverse(shufflePath(seed, 3)), minutes(1));
+    await expect(submitSession(db, u, sessionId, inverse(shufflePath(seed, 3)), minutes(2))).rejects.toThrow("already submitted");
   });
 });

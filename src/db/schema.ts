@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -57,7 +58,10 @@ export const otpCodes = pgTable(
   (t) => [index("otp_codes_phone_idx").on(t.phone, t.createdAt)],
 );
 
-export type GameKey = "puzzle15" | "chess" | "efootball" | "eafc";
+import type { ArcadeKey } from "@/lib/games/arcade/types";
+
+/** Outside games (results reported or read from Lichess) plus our own arcade games. */
+export type GameKey = "chess" | "efootball" | "eafc" | ArcadeKey;
 export type TournamentFormat = "bracket" | "leaderboard";
 export type TournamentStatus = "open" | "running" | "completed" | "cancelled";
 export type EntryType = "free" | "paid";
@@ -73,6 +77,8 @@ export const tournaments = pgTable("tournaments", {
   sponsoredPrizeKes: integer("sponsored_prize_kes").notNull().default(0),
   platformFeePercent: integer("platform_fee_percent").notNull().default(10),
   maxPlayers: integer("max_players").notNull(),
+  // Our own games: the stage everyone plays.
+  stage: integer("stage").notNull().default(1),
   // Leaderboard tournaments: attempts each player gets.
   attemptsPerPlayer: integer("attempts_per_player").notNull().default(3),
   status: text("status").$type<TournamentStatus>().notNull().default("open"),
@@ -162,24 +168,48 @@ export const disputes = pgTable("disputes", {
   createdAt: createdAt(),
 });
 
-export const puzzleAttempts = pgTable(
-  "puzzle_attempts",
+/** One play of one of our own games. The seed comes from the server and the result from replaying the input. */
+export const gameSessions = pgTable(
+  "game_sessions",
   {
     id: id(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
-    // Null for practice attempts.
+    game: text("game").$type<ArcadeKey>().notNull(),
+    stage: integer("stage").notNull(),
+    // Null for practice.
     tournamentId: text("tournament_id").references(() => tournaments.id),
     seed: bigint("seed", { mode: "number" }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
-    moveCount: integer("move_count"),
     timeMs: integer("time_ms"),
-    solved: boolean("solved").notNull().default(false),
+    score: integer("score"),
+    valid: boolean("valid").notNull().default(false),
+    cleared: boolean("cleared").notNull().default(false),
     flagged: boolean("flagged").notNull().default(false),
+    detail: text("detail"),
   },
-  (t) => [index("puzzle_attempts_tournament_idx").on(t.tournamentId, t.userId)],
+  (t) => [
+    index("game_sessions_tournament_idx").on(t.tournamentId, t.userId),
+    index("game_sessions_board_idx").on(t.game, t.stage, t.cleared),
+  ],
+);
+
+/** Each player's best result per game and stage. Clearing a stage unlocks the next one. */
+export const gameProgress = pgTable(
+  "game_progress",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    stage: integer("stage").notNull(),
+    bestScore: integer("best_score"),
+    bestTimeMs: integer("best_time_ms"),
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.game, t.stage] })],
 );
 
 // Double-entry ledger. Every money movement writes balanced rows with the same txId.
@@ -289,6 +319,6 @@ export type User = typeof users.$inferSelect;
 export type Tournament = typeof tournaments.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type Dispute = typeof disputes.$inferSelect;
-export type PuzzleAttempt = typeof puzzleAttempts.$inferSelect;
+export type GameSession = typeof gameSessions.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;

@@ -8,7 +8,7 @@ import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { requestOtp, verifyOtp } from "@/lib/auth";
 import { UserError } from "@/lib/errors";
-import { startPuzzleAttempt, submitPuzzleAttempt, type AttemptResult } from "@/lib/puzzles";
+import * as arcade from "@/lib/arcade";
 import { endSession, getCurrentUser, requireAdmin, requireUser, startSession } from "@/lib/session";
 import * as tournaments from "@/lib/tournaments";
 import { simulatePayment, startPayment, refreshPayment } from "@/lib/shop/checkout";
@@ -173,24 +173,28 @@ export async function submitChessAction(matchId: string, path: string, _: Action
   });
 }
 
-// ---------------------------------------------------------------- puzzle
+// ---------------------------------------------------------------- our own games
 
-export async function startPuzzleAction(tournamentId: string | null): Promise<{ attemptId: string; seed: number } | { error: string }> {
+export async function startGameAction(
+  game: string,
+  stage: number,
+  tournamentId: string | null,
+): Promise<{ sessionId: string; seed: number; stage: number } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };
   try {
-    return await startPuzzleAttempt(await getDb(), user, tournamentId);
+    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId });
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
   }
 }
 
-export async function submitPuzzleAction(attemptId: string, moves: string): Promise<AttemptResult | { error: string }> {
+export async function submitGameAction(sessionId: string, input: string): Promise<arcade.SessionResult | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };
   try {
-    return await submitPuzzleAttempt(await getDb(), user, attemptId, moves);
+    return await arcade.submitSession(await getDb(), user, sessionId, input);
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
@@ -211,6 +215,7 @@ export async function createTournamentAction(_: ActionState, form: FormData): Pr
       sponsoredPrizeKes: str(form, "sponsoredPrizeKes") || 0,
       maxPlayers: str(form, "maxPlayers"),
       attemptsPerPlayer: str(form, "attemptsPerPlayer") || 3,
+      stage: str(form, "stage") || 1,
       startsAt: nairobiDate(str(form, "startsAt")) ?? new Date(),
       endsAt: nairobiDate(str(form, "endsAt")),
       rules: str(form, "rules"),

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { ActionForm } from "@/components/ActionForm";
 import { Card, StatusBadge, gameName, kes, nairobiTime } from "@/components/ui";
 import { getDb } from "@/db";
-import { disputes, evidence, matches, products, puzzleAttempts, tournaments, users } from "@/db/schema";
+import { disputes, evidence, gameSessions, matches, products, tournaments, users } from "@/db/schema";
+import { ARCADE, ARCADE_KEYS } from "@/lib/games/arcade";
 import { formatFace } from "@/lib/shop/pricing";
 import { config } from "@/lib/config";
 import { requireAdmin } from "@/lib/session";
@@ -46,11 +47,11 @@ export default async function AdminPage() {
     .orderBy(tournaments.startsAt);
   const owed = await prizesOwed(db);
   const flagged = await db
-    .select({ a: puzzleAttempts, username: users.username })
-    .from(puzzleAttempts)
-    .innerJoin(users, eq(users.id, puzzleAttempts.userId))
-    .where(and(eq(puzzleAttempts.flagged, true)))
-    .orderBy(desc(puzzleAttempts.startedAt))
+    .select({ a: gameSessions, username: users.username })
+    .from(gameSessions)
+    .innerJoin(users, eq(users.id, gameSessions.userId))
+    .where(and(eq(gameSessions.flagged, true)))
+    .orderBy(desc(gameSessions.startedAt))
     .limit(20);
   const prizeProducts = await db.select().from(products).orderBy(products.brand, products.name);
 
@@ -175,7 +176,11 @@ export default async function AdminPage() {
                 <option value="efootball">eFootball (bracket)</option>
                 <option value="eafc">EA SPORTS FC (bracket)</option>
                 <option value="chess">Chess via Lichess (bracket)</option>
-                <option value="puzzle15">Speed puzzle (leaderboard)</option>
+                {ARCADE_KEYS.map((k) => (
+                  <option key={k} value={k}>
+                    {ARCADE[k].name} (ours, leaderboard)
+                  </option>
+                ))}
               </select>
             </label>
             <label className="label">
@@ -200,7 +205,11 @@ export default async function AdminPage() {
               <input name="maxPlayers" type="number" min={2} max={256} defaultValue={16} className="input" />
             </label>
             <label className="label">
-              Attempts per player (puzzle)
+              Stage (our games)
+              <input name="stage" type="number" min={1} max={10} defaultValue={1} className="input" />
+            </label>
+            <label className="label">
+              Attempts per player (our games)
               <input name="attemptsPerPlayer" type="number" min={1} max={20} defaultValue={3} className="input" />
             </label>
             <label className="label">
@@ -208,7 +217,7 @@ export default async function AdminPage() {
               <input name="startsAt" type="datetime-local" required className="input" />
             </label>
             <label className="label">
-              Ends (Kenya time, puzzle only)
+              Ends (Kenya time, our games only)
               <input name="endsAt" type="datetime-local" className="input" />
             </label>
             <label className="label">
@@ -235,7 +244,7 @@ export default async function AdminPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold">Flagged puzzle attempts</h2>
+        <h2 className="text-xl font-semibold">Flagged game results</h2>
         {flagged.length === 0 ? (
           <Card className="text-sm text-white/60">Nothing flagged.</Card>
         ) : (
@@ -243,7 +252,7 @@ export default async function AdminPage() {
             <ul className="text-sm">
               {flagged.map(({ a, username }) => (
                 <li key={a.id}>
-                  {username}: {a.moveCount} moves in {((a.timeMs ?? 0) / 1000).toFixed(2)}s · {nairobiTime(a.startedAt)}
+                  {username}: {ARCADE[a.game].name} stage {a.stage}, score {a.score} in {((a.timeMs ?? 0) / 1000).toFixed(2)}s · {nairobiTime(a.startedAt)}
                 </li>
               ))}
             </ul>

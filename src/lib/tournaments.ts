@@ -10,7 +10,7 @@ import {
   matches,
   orders,
   products,
-  puzzleAttempts,
+  gameSessions,
   tournaments,
   users,
   type Match,
@@ -18,6 +18,7 @@ import {
   type User,
 } from "@/db/schema";
 import { GAMES } from "./games/catalog";
+import { ARCADE, ARCADE_KEYS, isArcadeKey } from "./games/arcade";
 import { firstRoundPairings, nextMatchPosition, roundCount, bracketSize } from "./bracket";
 import { config } from "./config";
 import { UserError } from "./errors";
@@ -33,7 +34,8 @@ export { GAMES } from "./games/catalog";
 
 export const createTournamentSchema = z.object({
   title: z.string().trim().min(3).max(80),
-  game: z.enum(["puzzle15", "chess", "efootball", "eafc"]),
+  game: z.enum(["chess", "efootball", "eafc", ...ARCADE_KEYS]),
+  stage: z.coerce.number().int().min(1).max(20).default(1),
   entryType: z.enum(["free", "paid"]),
   entryFeeKes: z.coerce.number().int().min(0).max(100_000),
   sponsoredPrizeKes: z.coerce.number().int().min(0).max(10_000_000),
@@ -61,6 +63,7 @@ export async function createTournament(db: Db, admin: User, input: CreateTournam
   if (data.entryType === "paid" && data.entryFeeKes <= 0) throw new UserError("Paid tournaments need an entry fee");
   const format = GAMES[data.game].format;
   if (format === "leaderboard" && !data.endsAt) throw new UserError("Leaderboard tournaments need an end time");
+  if (isArcadeKey(data.game) && data.stage > ARCADE[data.game].stages.length) throw new UserError("That game has no such stage");
   if (data.endsAt && data.endsAt <= data.startsAt) throw new UserError("End time must be after the start time");
   const cardPrize = await parseCardPrize(db, data.prizeProductId, data.prizeCardValues);
 
@@ -75,6 +78,7 @@ export async function createTournament(db: Db, admin: User, input: CreateTournam
       sponsoredPrizeKes: data.sponsoredPrizeKes,
       maxPlayers: data.maxPlayers,
       attemptsPerPlayer: data.attemptsPerPlayer,
+      stage: isArcadeKey(data.game) ? data.stage : 1,
       startsAt: data.startsAt,
       endsAt: data.endsAt ?? null,
       rules: data.rules || null,
@@ -447,7 +451,7 @@ async function finishBracket(tx: Exec, t: Tournament, now: Date) {
   await settle(tx, t, ranking, now);
 }
 
-/** Ends a leaderboard tournament: best solved time wins. */
+/** Ends a leaderboard tournament: the leaderboard order is the final ranking. */
 export async function finishLeaderboard(db: Db, admin: User | null, tournamentId: string, now = new Date()): Promise<void> {
   if (admin && !admin.isAdmin) throw new UserError("Only admins can finish tournaments");
   await db.transaction(async (tx) => {
@@ -460,19 +464,34 @@ export async function finishLeaderboard(db: Db, admin: User | null, tournamentId
   });
 }
 
+/**
+ * Each player's best valid attempt. Score games: highest score, ties to the faster time.
+ * Time games: fastest cleared attempt, ties to fewer moves. Flagged attempts never count.
+ */
 export async function leaderboard(db: Exec, tournamentId: string) {
-  return db
-    .select({
-      userId: puzzleAttempts.userId,
-      username: users.username,
-      bestTimeMs: sql<number>`min(${puzzleAttempts.timeMs})::int`,
-      bestMoves: sql<number>`min(${puzzleAttempts.moveCount})::int`,
-    })
-    .from(puzzleAttempts)
-    .innerJoin(users, eq(users.id, puzzleAttempts.userId))
-    .where(and(eq(puzzleAttempts.tournamentId, tournamentId), eq(puzzleAttempts.solved, true), eq(puzzleAttempts.flagged, false)))
-    .groupBy(puzzleAttempts.userId, users.username)
-    .orderBy(sql`min(${puzzleAttempts.timeMs}) asc`, sql`min(${puzzleAttempts.moveCount}) asc`);
+  const [t] = await db.select().from(tournaments).where(eq(tournaments.id, tournamentId));
+  if (!t || !isArcadeKey(t.game)) return [];
+  const byScore = ARCADE[t.game].ranking === "score";
+  const rows = await db
+    .select({ userId: gameSessions.userId, username: users.username, score: gameSessions.score, timeMs: gameSessions.timeMs })
+    .from(gameSessions)
+    .innerJoin(users, eq(users.id, gameSessions.userId))
+    .where(
+      and(
+        eq(gameSessions.tournamentId, tournamentId),
+        eq(gameSessions.valid, true),
+        eq(gameSessions.flagged, false),
+        ...(byScore ? [] : [eq(gameSessions.cleared, true)]),
+      ),
+    );
+  const better = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+    byScore ? b.score! - a.score! || a.timeMs! - b.timeMs! : a.timeMs! - b.timeMs! || a.score! - b.score!;
+  const best = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    const cur = best.get(r.userId);
+    if (!cur || better(r, cur) < 0) best.set(r.userId, r);
+  }
+  return [...best.values()].sort(better).map((r) => ({ userId: r.userId, username: r.username, score: r.score!, timeMs: r.timeMs! }));
 }
 
 /** `ranking[i]` holds the players who finished in place i+1 (ties share a place). */

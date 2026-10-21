@@ -21,8 +21,8 @@ import {
 import { cardFeeKes, formatFace, priceKes } from "@/lib/shop/pricing";
 import { TestSupplier, type GiftCardSupplier } from "@/lib/shop/suppliers";
 import { createTournament, finishLeaderboard, joinTournament, startTournament } from "@/lib/tournaments";
-import { inverse, shufflePath } from "@/lib/games/puzzle15";
-import { startPuzzleAttempt, submitPuzzleAttempt } from "@/lib/puzzles";
+import { inverse, shufflePath } from "@/lib/games/arcade/slide";
+import { startSession, submitSession } from "@/lib/arcade";
 
 let db: Db;
 let supplier: TestSupplier;
@@ -207,7 +207,8 @@ describe("gift card tournament prizes", () => {
     const p = await psn();
     const t = await createTournament(db, admin, {
       title: "Puzzle Cup",
-      game: "puzzle15",
+      game: "slide",
+      stage: 3,
       entryType: "free",
       entryFeeKes: 0,
       sponsoredPrizeKes: 0,
@@ -223,8 +224,8 @@ describe("gift card tournament prizes", () => {
     await startTournament(db, admin, t.id, NOW);
     const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
     for (const [u, min, secs] of [[a, 1, 90], [b, 2, 200]] as const) {
-      const { attemptId, seed } = await startPuzzleAttempt(db, u, t.id, at(min));
-      await submitPuzzleAttempt(db, u, attemptId, inverse(shufflePath(seed)), new Date(at(min).getTime() + secs * 1000));
+      const { sessionId, seed } = await startSession(db, u, { game: "slide", tournamentId: t.id }, at(min));
+      await submitSession(db, u, sessionId, inverse(shufflePath(seed, 4)), new Date(at(min).getTime() + secs * 1000));
     }
     await finishLeaderboard(db, admin, t.id, at(100));
     const prizes = await db.select().from(orders).where(eq(orders.tournamentId, t.id));

@@ -15,6 +15,20 @@
       "when": 1792617651192,
       "tag": "0001_gift_card_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792618825378,
+      "tag": "0002_own_games",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792618826166,
+      "tag": "0003_drop_puzzle_attempts",
+      "breakpoints": true
     }
   ]
 }

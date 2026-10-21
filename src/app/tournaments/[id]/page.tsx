@@ -8,6 +8,7 @@ import { disputes, entries, matches, tournaments, users, type Match, type User }
 import { computePrizePool, distributePrizes, payoutSplit } from "@/lib/payouts";
 import { getCurrentUser } from "@/lib/session";
 import { applyAutoConfirms, finishLeaderboard, leaderboard } from "@/lib/tournaments";
+import { ARCADE, isArcadeKey } from "@/lib/games/arcade";
 import { joinAction, leaveAction } from "../../actions";
 import { MatchActions } from "./MatchActions";
 
@@ -104,7 +105,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
       )}
 
       {t.format === "leaderboard" ? (
-        <Leaderboard tournamentId={id} running={t.status === "running"} joined={joined} />
+        <Leaderboard tournamentId={id} game={t.game} stage={t.stage} running={t.status === "running"} joined={joined} />
       ) : (
         t.status !== "open" && <Bracket tournamentId={id} user={user} path={path} game={t.game} />
       )}
@@ -131,19 +132,38 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
   );
 }
 
-async function Leaderboard({ tournamentId, running, joined }: { tournamentId: string; running: boolean; joined: boolean }) {
+async function Leaderboard({
+  tournamentId,
+  game,
+  stage,
+  running,
+  joined,
+}: {
+  tournamentId: string;
+  game: string;
+  stage: number;
+  running: boolean;
+  joined: boolean;
+}) {
+  if (!isArcadeKey(game)) return null;
+  const def = ARCADE[game];
   const db = await getDb();
   const rows = await leaderboard(db, tournamentId);
   return (
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Leaderboard</h2>
+        <div>
+          <h2 className="font-semibold">Leaderboard</h2>
+          <p className="text-xs text-white/60">
+            Stage {stage}: {def.stages[stage - 1]?.goal}. {def.ranking === "score" ? "Highest score wins." : "Fastest time wins."}
+          </p>
+        </div>
         {running && joined && (
-          <Link href={`/play/puzzle?t=${tournamentId}`} className="btn-primary">Play an attempt</Link>
+          <Link href={`/play/${game}?t=${tournamentId}`} className="btn-primary">Play an attempt</Link>
         )}
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-white/60">No solved attempts yet.</p>
+        <p className="text-sm text-white/60">No results yet.</p>
       ) : (
         <ol className="flex flex-col gap-1 text-sm">
           {rows.map((r, i) => (
@@ -153,7 +173,8 @@ async function Leaderboard({ tournamentId, running, joined }: { tournamentId: st
                 {r.username}
               </span>
               <span className="font-mono">
-                {(r.bestTimeMs / 1000).toFixed(2)}s · {r.bestMoves} moves
+                {def.ranking === "score" ? `${r.score.toLocaleString()} ${def.scoreLabel} · ` : ""}
+                {(r.timeMs / 1000).toFixed(2)}s
               </span>
             </li>
           ))}
