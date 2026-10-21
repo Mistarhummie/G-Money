@@ -90,3 +90,48 @@ describe("connect4 verify", () => {
     expect(worst).toBeLessThan(3000);
   });
 });
+
+describe("connect4 pvp", () => {
+  const replay = connect4.pvp!.replay;
+  const split = (s: string) => s.split("");
+
+  it("replays a two-player game to the right winner", () => {
+    expect(replay(1, [])).toEqual({ turn: 0, over: false, winner: null });
+    expect(replay(1, split("06162"))).toEqual({ turn: 1, over: false, winner: null });
+    expect(replay(1, split("061626"))).toMatchObject({ over: false, turn: 0 });
+    expect(replay(1, split("0616263"))).toMatchObject({ over: true, winner: 0 });
+    expect(replay(1, split("50616263"))).toMatchObject({ over: true, winner: 1 });
+  });
+
+  it("returns null for illegal, malformed and after-the-end moves", () => {
+    expect(replay(1, ["7"])).toBeNull();
+    expect(replay(1, ["33"])).toBeNull();
+    expect(replay(1, ["a"])).toBeNull();
+    expect(replay(1, split("0000000"))).toBeNull(); // column 0 is full (or won) before the 7th disc
+    expect(replay(1, split("06162634"))).toBeNull();
+  });
+
+  it("replays a full-board draw quickly", () => {
+    // Random play that avoids completing four whenever it can, until a game fills the board.
+    let draw: string[] | null = null;
+    for (let seed = 1; !draw && seed < 500; seed++) {
+      const rand = mulberry32(seed);
+      const moves: string[] = [];
+      for (;;) {
+        const options = ["0", "1", "2", "3", "4", "5", "6"].filter((c) => replay(1, [...moves, c]));
+        if (!options.length) break;
+        const safe = options.filter((c) => !replay(1, [...moves, c])!.over);
+        const pick = (safe.length ? safe : options)[Math.floor(rand() * (safe.length || options.length))];
+        moves.push(pick);
+        if (replay(1, moves)!.over) break;
+      }
+      if (moves.length === 42 && replay(1, moves)!.winner === null) draw = moves;
+    }
+    expect(draw).not.toBeNull();
+    const t = performance.now();
+    expect(replay(1, draw!)).toMatchObject({ over: true, winner: null });
+    const ms = performance.now() - t;
+    console.log(`connect4 pvp: 42 moves replayed in ${ms.toFixed(1)} ms`);
+    expect(ms).toBeLessThan(200);
+  });
+});

@@ -8,7 +8,9 @@ import {
   placeCue,
   placementError,
   playComputer,
+  legalTargets,
   pool,
+  replayPvp,
   shotError,
   simulate,
   type State,
@@ -156,5 +158,92 @@ describe("pool", () => {
     for (let k = 0; k < 120; k++) simulate(s.balls, { tx: 635 + (k % 7), ty: 635, power: 100 }, false);
     worst = Math.max(worst, performance.now() - t0);
     expect(worst).toBeLessThan(3000);
+  });
+
+  describe("two players", () => {
+    /** Two honest players: side 0 uses the strong shot logic, side 1 the weak one. One element per visit. */
+    function pvpGame(seed: number) {
+      let s = initialState(seed);
+      const moves: string[] = [];
+      while (s.winner === null) {
+        const mv = s.isBreak ? { place: [635, 2100] as [number, number], shot: { tx: 635, ty: 635, power: 100 } } : computerMove(s, s.turn === 0 ? 5 : 1, seed + s.turn);
+        let move = "";
+        if (mv.place) {
+          move = encodePlace(mv.place[0], mv.place[1]) + ";";
+          s = placeCue(s, mv.place[0], mv.place[1]) as State;
+        }
+        moves.push(move + encodeShot(mv.shot));
+        s = applyShot(s, mv.shot, false).state;
+      }
+      return { state: s, moves };
+    }
+
+    it("replays a legal game to the right winner, with the right side to move", () => {
+      const { state, moves } = pvpGame(11);
+      const end = pool.pvp!.replay(11, moves);
+      expect(end).not.toBeNull();
+      expect(end!.over).toBe(true);
+      expect(end!.winner).toBe(state.winner === -1 ? null : state.winner);
+      for (const n of [0, 1, 2, 5]) {
+        const mid = pool.pvp!.replay(11, moves.slice(0, n));
+        expect(mid).toMatchObject({ over: false, turn: replayPvp(11, moves.slice(0, n))!.turn });
+      }
+      expect(pool.pvp!.replay(11, [])).toMatchObject({ turn: 0, over: false });
+    });
+
+    it("rejects illegal moves and moves after the end", () => {
+      const r = (moves: string[]) => pool.pvp!.replay(11, moves);
+      expect(r(["s:635,635,100"])).toBeNull(); // the break needs the cue ball placed first
+      expect(r(["p:635,1500;s:635,635,100"])).toBeNull(); // not behind the line
+      expect(r(["p:635,2100"])).toBeNull(); // placement without a shot
+      expect(r(["p:635,2100;s:635,635,100;s:635,635,50"])).toBeNull(); // two shots in one move
+      expect(r(["p:635,2100;s:635,635,0"])).toBeNull();
+      expect(r(["hello"])).toBeNull();
+      const ok = r(["p:635,2100;s:635,635,100"]);
+      expect(ok).not.toBeNull();
+      // Placing when you do not have ball in hand is illegal.
+      const s1 = replayPvp(11, ["p:635,2100;s:635,635,100"])!;
+      if (!s1.ballInHand) expect(r(["p:635,2100;s:635,635,100", "p:600,2000;s:600,600,50"])).toBeNull();
+      const { moves } = pvpGame(11);
+      expect(r([...moves, "s:600,600,50"])).toBeNull();
+      expect(legalTargets(initialState(11)).length).toBe(15);
+    });
+
+    it("replays a long game quickly", () => {
+      let worst = 0;
+      for (let seed = 1; seed <= 5; seed++) {
+        let a = seed * 31 + 7;
+        const rnd = () => {
+          a = (a * 1103515245 + 12345) % 2147483648;
+          return a / 2147483648;
+        };
+        let s = initialState(seed);
+        const moves: string[] = [];
+        while (s.winner === null) {
+          let move = "";
+          let st = s;
+          if (s.ballInHand) {
+            let x = 0;
+            let y = 0;
+            do {
+              x = 100 + Math.floor(rnd() * 1000);
+              y = s.isBreak ? 1950 + Math.floor(rnd() * 500) : 100 + Math.floor(rnd() * 2300);
+            } while (placementError(s, x, y));
+            move = encodePlace(x, y) + ";";
+            st = placeCue(s, x, y) as State;
+          }
+          const tg = legalTargets(st);
+          const b = st.balls[tg[Math.floor(rnd() * tg.length)]];
+          const shot = { tx: Math.round(b.x + (rnd() - 0.5) * 60), ty: Math.round(b.y + (rnd() - 0.5) * 60), power: 60 + Math.floor(rnd() * 41) };
+          if (shotError(st, shot)) continue;
+          moves.push(move + encodeShot(shot));
+          s = applyShot(st, shot, false).state;
+        }
+        const t0 = performance.now();
+        expect(pool.pvp!.replay(seed, moves)).not.toBeNull();
+        worst = Math.max(worst, performance.now() - t0);
+      }
+      expect(worst).toBeLessThan(200);
+    });
   });
 });

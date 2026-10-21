@@ -15,13 +15,15 @@ type Props = {
   kind: "solo" | "versus";
   /** Tournament attempts play the tournament's stage only. */
   tournament: { id: string; stage: number } | null;
+  /** A match round against another player: one go, on the match's stage. */
+  challenge?: { id: string; stage: number } | null;
 };
 
 type Result = { valid: boolean; cleared: boolean; score: number; timeMs: number; flagged: boolean; detail?: string; unlockedStage?: number };
 
-export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, tournament }: Props) {
+export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, tournament, challenge = null }: Props) {
   const router = useRouter();
-  const [stage, setStage] = useState(tournament?.stage ?? unlocked);
+  const [stage, setStage] = useState(challenge?.stage ?? tournament?.stage ?? unlocked);
   const [session, setSession] = useState<{ id: string; seed: number; stage: number; startedAt: number } | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
     setError(null);
     setResult(null);
     startTransition(async () => {
-      const res = await startGameAction(game, which, tournament?.id ?? null);
+      const res = await startGameAction(game, which, tournament?.id ?? null, challenge?.id ?? null);
       if ("error" in res) return setError(res.error);
       setStage(res.stage);
       setSession({ id: res.sessionId, seed: res.seed, stage: res.stage, startedAt: Date.now() });
@@ -64,7 +66,7 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
 
   return (
     <div className="flex flex-col gap-4">
-      {!tournament && (
+      {!tournament && !challenge && (
         <div className="flex flex-wrap gap-2">
           {stages.map((s, i) => {
             const n = i + 1;
@@ -123,12 +125,12 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
       )}
       {error && <p className="text-center text-sm text-red-400">{error}</p>}
 
-      {!playing && (
+      {!playing && !(challenge && session) && (
         <div className="flex gap-2">
           <button onClick={() => start(stage)} disabled={pending} className="btn-primary flex-1">
-            {pending ? "Loading…" : session ? "Play again" : "Start"}
+            {pending ? "Loading…" : session ? "Play again" : challenge ? "Start my round" : "Start"}
           </button>
-          {result?.unlockedStage && !tournament && (
+          {result?.unlockedStage && !tournament && !challenge && (
             <button onClick={() => start(result.unlockedStage!)} disabled={pending} className="btn-secondary flex-1">
               Next stage
             </button>

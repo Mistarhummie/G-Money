@@ -1,34 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BaoBoard, DirectionPicker, arrowKeyHandler } from "@/components/games/bao/BaoBoard";
 import { legalMoves, moveToString, replay, seedsOf, startsWithCapture, type Move } from "@/lib/games/arcade/bao";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
-
-// Board rows top to bottom: computer outer, computer inner, your inner, your outer.
-// Each cell maps a screen column (0..7, left to right as you see it) to [side, pit index k].
-const ROWS: { side: 0 | 1; k: (c: number) => number }[] = [
-  { side: 1, k: (c) => 8 + c },
-  { side: 1, k: (c) => 7 - c },
-  { side: 0, k: (c) => c },
-  { side: 0, k: (c) => 15 - c },
-];
-
-/** Screen direction to sowing direction: on your inner row "right" is clockwise, on your outer row it is anticlockwise. */
-const dirFor = (pit: number, screen: "left" | "right"): 1 | -1 => ((pit < 8) === (screen === "right") ? 1 : -1);
-
-function Seeds({ n }: { n: number }) {
-  const dots = Math.min(n, 12);
-  return (
-    <>
-      <span className="pointer-events-none absolute inset-1 flex flex-wrap content-center items-center justify-center gap-[2px] opacity-60">
-        {Array.from({ length: dots }, (_, i) => (
-          <span key={i} className="h-1 w-1 rounded-full bg-amber-200" />
-        ))}
-      </span>
-      <span className="relative text-sm font-bold text-white drop-shadow">{n || ""}</span>
-    </>
-  );
-}
 
 export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
   const [moves, setMoves] = useState<Move[]>([]);
@@ -42,7 +17,6 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
   const myTurn = !game.result && !thinking;
   const legal = useMemo(() => (myTurn ? legalMoves(game.board, 0) : []), [game, myTurn]);
   const mustCapture = legal.length > 0 && startsWithCapture(game.board, 0, legal[0]);
-  const isLegalMove = (pit: number, dir: 1 | -1) => legal.some((m) => m.pit === pit && m.dir === dir);
 
   // The computer replies after a short pause.
   useEffect(() => {
@@ -58,11 +32,10 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
     }
   }, [game.result, thinking, input, onFinish]);
 
-  function play(pit: number, screen: "left" | "right") {
-    const dir = dirFor(pit, screen);
-    if (!myTurn || !isLegalMove(pit, dir)) return;
+  function play(pit: number, dir: 1 | -1) {
+    if (!myTurn || !legal.some((m) => m.pit === pit && m.dir === dir)) return;
     setSelected(null);
-    setMoves([...moves, { pit, dir }]);
+    setMoves((ms) => [...ms, { pit, dir }]);
     setThinking(true);
   }
 
@@ -73,22 +46,15 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
   }
 
   // Keyboard: arrows sow the selected pit, Escape cancels.
+  const playRef = useRef(play);
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (selected === null) return;
-      if (e.key === "Escape") setSelected(null);
-      else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        const dir = dirFor(selected, e.key === "ArrowLeft" ? "left" : "right");
-        if (!myTurn || !legal.some((m) => m.pit === selected && m.dir === dir)) return;
-        setSelected(null);
-        setMoves((ms) => [...ms, { pit: selected, dir }]);
-        setThinking(true);
-      }
-    }
+    playRef.current = play;
+  });
+  useEffect(() => {
+    const onKey = arrowKeyHandler(selected, legal, setSelected, (pit, dir) => playRef.current(pit, dir));
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, myTurn, legal]);
+  }, [selected, legal]);
 
   const last = game.lastComputerMove;
   const lastMine = moves[moves.length - 1];
@@ -117,43 +83,15 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
         </button>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#3b2414]/60 p-1.5">
-        {ROWS.map((row, r) => (
-          <div key={r} className={`grid grid-cols-8 gap-1 ${r === 2 ? "mt-2 border-t border-white/10 pt-2" : r ? "mt-1" : ""}`}>
-            {Array.from({ length: 8 }, (_, c) => {
-              const k = row.k(c);
-              const n = game.board[row.side * 16 + k];
-              const mine = row.side === 0;
-              const canPick = mine && legal.some((m) => m.pit === k);
-              const isSel = mine && selected === k;
-              const wasComputer = !mine && last && last.pit === k && !thinking;
-              const wasMine = mine && lastMine && lastMine.pit === k;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  disabled={!canPick}
-                  onClick={() => setSelected(isSel ? null : k)}
-                  aria-label={`${mine ? "Your" : "Computer"} pit, ${n} seeds`}
-                  className={`relative flex aspect-square items-center justify-center rounded-full bg-black/45 shadow-inner transition ${
-                    isSel
-                      ? "ring-2 ring-emerald-400"
-                      : canPick
-                        ? "ring-1 ring-emerald-400/50 active:scale-95"
-                        : wasComputer
-                          ? "ring-2 ring-amber-400/80"
-                          : wasMine
-                            ? "ring-1 ring-white/30"
-                            : ""
-                  }`}
-                >
-                  <Seeds n={n} />
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      <BaoBoard
+        board={game.board}
+        me={0}
+        legal={legal}
+        selected={selected}
+        onSelect={setSelected}
+        theirLast={last && !thinking ? last.pit : null}
+        myLast={lastMine?.pit ?? null}
+      />
 
       <div className="rounded-xl bg-black/30 px-3 py-2 text-center text-sm">
         <div className="font-semibold text-white">{status}</div>
@@ -165,24 +103,7 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
         )}
       </div>
 
-      {selected !== null && myTurn && (
-        <div className="grid grid-cols-2 gap-2">
-          {(["left", "right"] as const).map((screen) => {
-            const ok = isLegalMove(selected, dirFor(selected, screen));
-            return (
-              <button
-                key={screen}
-                type="button"
-                disabled={!ok}
-                onClick={() => play(selected, screen)}
-                className="rounded-xl bg-emerald-500/90 py-3 text-lg font-bold text-emerald-950 transition active:scale-95 disabled:bg-white/5 disabled:text-white/30"
-              >
-                {screen === "left" ? "← Sow left" : "Sow right →"}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {selected !== null && myTurn && <DirectionPicker pit={selected} legal={legal} onPick={(dir) => play(selected, dir)} />}
       <p className="text-center text-xs text-white/50">Your rows are the bottom two. Pits with a green ring can be played.</p>
     </div>
   );

@@ -278,6 +278,46 @@ export function scoreFor(result: Result, stage: number, playerMoves: number): nu
   return 0;
 }
 
+// ---------------------------------------------------------------- player vs player
+
+/** A two-player game after replaying its moves. Each move is in the mover's own notation ("B3+"). */
+export type PvpGame = {
+  board: Board;
+  turn: Side;
+  plies: number;
+  over: boolean;
+  winner: Side | null;
+  detail?: string;
+  lastMove: Move | null;
+};
+
+/** Replays a two-player game (side 0 moves first). Null if any move is malformed, illegal or after the end. */
+export function replayPvp(moves: string[]): PvpGame | null {
+  if (moves.length > MAX_PLIES) return null;
+  const g: PvpGame = { board: startBoard(), turn: 0, plies: 0, over: false, winner: null, lastMove: null };
+  const settlePvp = () => {
+    if (!legalMoves(g.board, g.turn).length) {
+      g.over = true;
+      g.winner = (1 - g.turn) as Side;
+      g.detail = innerEmpty(g.board, g.turn) ? "Front row emptied" : "No moves left";
+    } else if (g.plies >= MAX_PLIES) {
+      g.over = true;
+      g.detail = "Draw after 200 moves";
+    }
+  };
+  for (const t of moves) {
+    if (g.over) return null;
+    const m = typeof t === "string" ? parseMove(t) : null;
+    if (!m || !isLegal(g.board, g.turn, m)) return null;
+    g.board = applyMove(g.board, g.turn, m);
+    g.lastMove = m;
+    g.turn = (1 - g.turn) as Side;
+    g.plies++;
+    settlePvp();
+  }
+  return g;
+}
+
 export const bao: ArcadeGame = {
   key: "bao",
   name: "Bao",
@@ -289,6 +329,14 @@ export const bao: ArcadeGame = {
   scoreLabel: "points",
   stages: STAGES.map(({ name, goal }) => ({ name, goal })),
   timeLimitMs: 30 * 60 * 1000,
+  pvp: {
+    replay(_seed, moves) {
+      // The start position does not depend on the seed.
+      const g = replayPvp(moves);
+      return g && { turn: g.turn, over: g.over, winner: g.winner, detail: g.detail };
+    },
+    maxMoveLength: 3,
+  },
   verify({ seed, stage, input, elapsedMs }) {
     if (input.length > 600) return invalid("Too many moves");
     const tokens = input.trim() ? input.trim().split(/\s+/) : [];

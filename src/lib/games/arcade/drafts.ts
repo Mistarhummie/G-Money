@@ -1,5 +1,5 @@
 import { mulberry32, randInt, tooFast } from "./rng";
-import { invalid, type ArcadeGame } from "./types";
+import { invalid, type ArcadeGame, type PvpState } from "./types";
 
 /**
  * Drafts (draughts) as commonly played in East Africa, against the computer.
@@ -333,6 +333,37 @@ export function scoreFor(stage: number, result: 0 | 1 | 2 | 3, playerMoves: numb
   return 0;
 }
 
+// ---- Player vs player ------------------------------------------------------------------------
+// Side 0 is the side that moves first (the "player" side above, starting on 21-32); side 1 starts on 1-12.
+// Each move string is one turn in the same notation as the vs-computer input, e.g. "22-18" or "31x22x13".
+
+export const PVP_MAX_MOVE_LENGTH = 64;
+const MOVE_TEXT = /^\d{1,2}([-x]\d{1,2})+$/;
+
+/** Replay a two-player game; null if any move is malformed, illegal or comes after the end. */
+export function replayDrafts(seed: number, moves: string[]): DraftsState | null {
+  if (moves.length > MAX_PLIES) return null;
+  const s = newGame(seed, 1);
+  for (const t of moves) {
+    if (s.result !== 0 || typeof t !== "string" || t.length > PVP_MAX_MOVE_LENGTH || !MOVE_TEXT.test(t)) return null;
+    const m = findMove(s, t);
+    if (!m) return null;
+    play(s, m);
+  }
+  return s;
+}
+
+/** Squares (0-31) of a move written in notation, e.g. "31x22x13" -> [30, 21, 12]. */
+export const pathOf = (text: string) => text.split(/[-x]/).map((n) => Number(n) - 1);
+
+export function pvpStateOf(s: DraftsState): PvpState {
+  const turn = s.turn === PLAYER ? 0 : 1;
+  if (s.result === 1 || s.result === 2) return { turn, over: true, winner: s.result === 1 ? 0 : 1, detail: "No moves left" };
+  if (s.result === 3)
+    return { turn, over: true, winner: null, detail: s.plies >= MAX_PLIES ? "Draw: move limit reached" : "Draw: 40 moves each without a capture or man move" };
+  return { turn, over: false, winner: null };
+}
+
 export const drafts: ArcadeGame = {
   key: "drafts",
   name: "Drafts",
@@ -365,5 +396,12 @@ export const drafts: ArcadeGame = {
       flagged: tooFast(tokens.length, elapsedMs, MAX_HUMAN_MOVES_PER_SECOND),
       detail: result === 0 ? "Gave up" : result === 2 ? "The computer won" : result === 3 ? "Draw" : undefined,
     };
+  },
+  pvp: {
+    replay(seed, moves) {
+      const s = replayDrafts(seed, moves);
+      return s && pvpStateOf(s);
+    },
+    maxMoveLength: PVP_MAX_MOVE_LENGTH,
   },
 };

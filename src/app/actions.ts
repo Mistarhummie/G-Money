@@ -9,6 +9,7 @@ import { users } from "@/db/schema";
 import { requestOtp, verifyOtp } from "@/lib/auth";
 import { UserError } from "@/lib/errors";
 import * as arcade from "@/lib/arcade";
+import * as matches from "@/lib/challenges";
 import { endSession, getCurrentUser, requireAdmin, requireUser, startSession } from "@/lib/session";
 import * as tournaments from "@/lib/tournaments";
 import { simulatePayment, startPayment, refreshPayment } from "@/lib/shop/checkout";
@@ -179,11 +180,12 @@ export async function startGameAction(
   game: string,
   stage: number,
   tournamentId: string | null,
+  challengeId: string | null = null,
 ): Promise<{ sessionId: string; seed: number; stage: number } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };
   try {
-    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId });
+    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId, challengeId });
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
@@ -195,6 +197,75 @@ export async function submitGameAction(sessionId: string, input: string): Promis
   if (!user) return { error: "Sign in to play" };
   try {
     return await arcade.submitSession(await getDb(), user, sessionId, input);
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------- player vs player
+
+export async function createChallengeAction(_: ActionState, form: FormData): Promise<ActionState> {
+  let id = "";
+  const result = await run(async () => {
+    const user = await requireUser();
+    const c = await matches.createChallenge(await getDb(), user, {
+      game: str(form, "game"),
+      stage: Number(str(form, "stage") || 1),
+      opponent: str(form, "opponent"),
+    });
+    id = c.id;
+  });
+  if (id) redirect(`/challenge/${id}`);
+  return result;
+}
+
+export async function acceptChallengeAction(id: string): Promise<{ error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    await matches.acceptChallenge(await getDb(), user, id);
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+  revalidatePath(`/challenge/${id}`);
+  return {};
+}
+
+export async function cancelChallengeAction(id: string): Promise<{ error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    await matches.cancelChallenge(await getDb(), user, id);
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+  revalidatePath(`/challenge/${id}`);
+  return {};
+}
+
+export async function playMoveAction(id: string, move: string): Promise<{ view?: matches.ChallengeView; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  const db = await getDb();
+  try {
+    const c = await matches.playMove(db, user, id, String(move));
+    return { view: await matches.challengeView(db, c, user) };
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+export async function resignAction(id: string): Promise<{ view?: matches.ChallengeView; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  const db = await getDb();
+  try {
+    const c = await matches.resign(db, user, id);
+    return { view: await matches.challengeView(db, c, user) };
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;

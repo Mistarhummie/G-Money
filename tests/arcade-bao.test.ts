@@ -8,6 +8,7 @@ import {
   newGame,
   parseMove,
   replay,
+  replayPvp,
   seedsOf,
   startBoard,
   type Board,
@@ -106,5 +107,71 @@ describe("bao", () => {
       worst = Math.max(worst, performance.now() - t);
     }
     expect(worst).toBeLessThan(3000);
+  });
+
+  describe("player vs player", () => {
+    /** Two searching players; returns the move list (each in its mover's own notation). */
+    function pvpGame(seed: number, depth0: number, depth1: number): string[] {
+      const rand = mulberry32(seed);
+      const moves: string[] = [];
+      let g = replayPvp(moves)!;
+      while (!g.over) {
+        const m = computerMove(g.board, g.turn, g.turn === 0 ? depth0 : depth1, rand)!;
+        moves.push(moveToString(m));
+        g = replayPvp(moves)!;
+      }
+      return moves;
+    }
+
+    it("replays a full game to the right winner", () => {
+      const moves = pvpGame(77, 4, 2);
+      const state = bao.pvp!.replay(77, moves)!;
+      expect(state.over).toBe(true);
+      // The side that made the last move won (the other side was left without a move), unless drawn at 200 plies.
+      if (moves.length < 200) expect(state.winner).toBe(((moves.length - 1) % 2) as 0 | 1);
+      expect(bao.pvp!.replay(77, moves.slice(0, -1))).toMatchObject({ over: false, turn: ((moves.length - 1) % 2) as 0 | 1 });
+    });
+
+    it("matches the vs-computer game when the same moves are played", () => {
+      // Interleave the player's moves with the computer's replies from a vs-computer game.
+      const { input } = playGame(2024, 3, 3);
+      const mine = input.split(" ").map((t) => parseMove(t)!);
+      const all: string[] = [];
+      for (let i = 1; i <= mine.length; i++) {
+        const g = replay(2024, 3, mine.slice(0, i))!;
+        all.push(moveToString(mine[i - 1]));
+        if (g.lastComputerMove && g.plies === all.length + 1) all.push(moveToString(g.lastComputerMove));
+      }
+      const vsComputer = replay(2024, 3, mine)!;
+      const state = bao.pvp!.replay(0, all)!;
+      expect(state.over).toBe(true);
+      expect(state.winner).toBe(vsComputer.result === "win" ? 0 : 1);
+    });
+
+    it("returns null for illegal, malformed and after-the-end moves", () => {
+      const start = replayPvp([])!;
+      const legal = legalMoves(start.board, 0).map(moveToString);
+      const illegal = ["A1+", "A1-", "B1+", "B1-", "A8+", "B8-"].find((t) => !legal.includes(t))!;
+      expect(bao.pvp!.replay(1, [illegal])).toBeNull();
+      expect(bao.pvp!.replay(1, ["B9+"])).toBeNull();
+      expect(bao.pvp!.replay(1, ["b3+"])).toBeNull();
+      expect(bao.pvp!.replay(1, [""])).toBeNull();
+      const moves = pvpGame(5, 3, 3);
+      const end = replayPvp(moves)!;
+      expect(end.over).toBe(true);
+      expect(bao.pvp!.replay(5, [...moves, legal[0]])).toBeNull();
+      expect(bao.pvp!.maxMoveLength).toBe(3);
+    });
+
+    it("replays long games quickly", () => {
+      let worst = 0;
+      for (let seed = 1; seed <= 30; seed++) {
+        const moves = pvpGame(seed, 1, 1);
+        const t = performance.now();
+        expect(bao.pvp!.replay(seed, moves)).not.toBeNull();
+        worst = Math.max(worst, performance.now() - t);
+      }
+      expect(worst).toBeLessThan(200);
+    });
   });
 });

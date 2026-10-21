@@ -119,3 +119,46 @@ describe("chessbot verify", () => {
     expect(ms).toBeLessThan(3000);
   });
 });
+
+describe("chessbot two-player", () => {
+  const rules = chessbot.pvp!;
+
+  it("replays a game to the right winner", () => {
+    // Fool's mate: Black (side 1) wins.
+    const fools = ["f2f3", "e7e5", "g2g4", "d8h4"];
+    expect(rules.replay(0, fools.slice(0, 3))).toEqual({ turn: 1, over: false, winner: null });
+    expect(rules.replay(0, fools)).toMatchObject({ over: true, winner: 1, detail: "Checkmate" });
+    // Scholar's mate: White (side 0) wins.
+    expect(rules.replay(7, ["e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6", "h5f7"])).toMatchObject({ over: true, winner: 0 });
+  });
+
+  it("ends a draw with no winner", () => {
+    const shuffle = ["g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1", "f6g8"];
+    expect(rules.replay(0, shuffle)).toMatchObject({ over: true, winner: null, detail: "Draw by threefold repetition" });
+  });
+
+  it("rejects illegal moves and moves after the end", () => {
+    expect(rules.replay(0, ["e2e5"])).toBeNull();
+    expect(rules.replay(0, ["e7e5"])).toBeNull(); // Black can't move first
+    expect(rules.replay(0, ["junk"])).toBeNull();
+    expect(rules.replay(0, ["f2f3", "e7e5", "g2g4", "d8h4", "e2e4"])).toBeNull();
+    expect(rules.replay(0, Array(300).fill("e2e4"))).toBeNull();
+  });
+
+  it("replays a long game quickly", () => {
+    // Engine plays both sides for up to the 200-ply cap.
+    let pos = startPosition();
+    const moves: string[] = [];
+    while (!gameStatus(pos).over) {
+      const m = computerMove(pos, moves.length, 2);
+      moves.push(toUci(m));
+      pos = play(pos, m);
+    }
+    const t = performance.now();
+    const state = rules.replay(0, moves);
+    const ms = performance.now() - t;
+    console.log(`chessbot pvp replay of ${moves.length} plies: ${ms.toFixed(0)}ms`);
+    expect(state?.over).toBe(true);
+    expect(ms).toBeLessThan(200);
+  });
+});

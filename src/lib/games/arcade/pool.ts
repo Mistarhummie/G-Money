@@ -186,11 +186,12 @@ export const powerToSpeed = (power: number) => MIN_SPEED + ((MAX_SPEED - MIN_SPE
 
 /** Runs one shot to rest. Pure and deterministic. */
 export function simulate(start: Ball[], shot: Shot, record: boolean): SimResult {
-  const x = start.map((b) => b.x);
-  const y = start.map((b) => b.y);
+  // Typed arrays hold the same IEEE doubles as plain numbers; they are just faster.
+  const x = Float64Array.from(start, (b) => b.x);
+  const y = Float64Array.from(start, (b) => b.y);
   const on = start.map((b) => b.on);
-  const vx: number[] = new Array(16).fill(0);
-  const vy: number[] = new Array(16).fill(0);
+  const vx = new Float64Array(16);
+  const vy = new Float64Array(16);
   const potted: number[] = [];
   const frames: Float32Array[] | null = record ? [] : null;
   let firstHit = -1;
@@ -333,7 +334,7 @@ export function simulate(start: Ball[], shot: Shot, record: boolean): SimResult 
     if (record && (step + 1) % STEPS_PER_FRAME === 0) snap();
   }
   if (record) snap();
-  const balls = x.map((bx, i) => ({ x: bx, y: y[i], on: on[i] }));
+  const balls = Array.from(x, (bx, i) => ({ x: bx, y: y[i], on: on[i] }));
   return { balls, firstHit, potted, frames, steps: step };
 }
 
@@ -372,10 +373,14 @@ export function shotError(state: State, shot: Shot): string | null {
 }
 
 /** Plays a shot and applies the rules. Assumes shotError(state, shot) is null. */
-export function applyShot(state: State, shot: Shot, record: boolean): { state: State; sim: SimResult } {
+/** Names used in `note`, side 0 first. */
+export const VS_COMPUTER_NAMES: [string, string] = ["You", "Computer"];
+
+export function applyShot(state: State, shot: Shot, record: boolean, names: [string, string] = VS_COMPUTER_NAMES): { state: State; sim: SimResult } {
   const shooter = state.turn;
   const opp: Player = shooter === 0 ? 1 : 0;
-  const who = shooter === 0 ? "You" : "Computer";
+  const who = names[shooter];
+  const has = (n: string) => (n === "You" ? "You have" : `${n} has`);
   const sim = simulate(state.balls, shot, record);
   const balls = sim.balls.slice();
   const myGroup = state.groups[shooter];
@@ -424,7 +429,7 @@ export function applyShot(state: State, shot: Shot, record: boolean): { state: S
     if (cuePotted) balls[0] = { ...balls[0], on: false };
     next.turn = opp;
     next.ballInHand = true;
-    next.note = `Foul by ${who === "You" ? "you" : "the computer"}: ${foul}. ${opp === 0 ? "You have" : "Computer has"} ball in hand.`;
+    next.note = `Foul (${foul}). ${has(names[opp])} ball in hand.`;
   } else {
     const g = next.groups[shooter];
     const potOwn = state.isBreak ? objectPots.length > 0 : g !== null && objectPots.some((b) => groupOf(b) === g);
@@ -663,6 +668,34 @@ export function replay(seed: number, stage: number, tokens: Token[]): State | st
   return s;
 }
 
+/**
+ * Two players at one table. Each move is one visit to the table: "s:tx,ty,pow", or
+ * "p:x,y;s:tx,ty,pow" when that side has ball in hand. Side 0 places and breaks.
+ * Returns the state after all moves, or null if any move is illegal or comes after the end.
+ */
+export function replayPvp(seed: number, moves: string[], names: [string, string] = ["Player 1", "Player 2"]): State | null {
+  let s = initialState(seed);
+  for (const move of moves) {
+    if (s.winner !== null || move.length > PVP_MAX_MOVE_LENGTH) return null;
+    const toks = parseInput(move);
+    if (!toks || toks.length !== (s.ballInHand ? 2 : 1)) return null;
+    let k = 0;
+    if (s.ballInHand) {
+      const t = toks[k++];
+      if (t.kind !== "p") return null;
+      const placed = placeCue(s, t.x, t.y);
+      if (typeof placed === "string") return null;
+      s = placed;
+    }
+    const t = toks[k];
+    if (t.kind !== "s" || shotError(s, t.shot)) return null;
+    s = applyShot(s, t.shot, false, names).state;
+  }
+  return s;
+}
+
+export const PVP_MAX_MOVE_LENGTH = 40;
+
 export const pool: ArcadeGame = {
   key: "pool",
   name: "8-Ball Pool",
@@ -674,6 +707,14 @@ export const pool: ArcadeGame = {
   scoreLabel: "points",
   stages: STAGES.map(({ name, goal }) => ({ name, goal })),
   timeLimitMs: 30 * 60 * 1000,
+  pvp: {
+    maxMoveLength: PVP_MAX_MOVE_LENGTH,
+    replay(seed, moves) {
+      const s = replayPvp(seed, moves);
+      if (!s) return null;
+      return { turn: s.turn, over: s.winner !== null, winner: s.winner === 0 || s.winner === 1 ? s.winner : null, detail: s.note };
+    },
+  },
   verify({ seed, stage, input, elapsedMs }) {
     const tokens = parseInput(input);
     if (!tokens) return invalid("Invalid moves");

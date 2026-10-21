@@ -180,6 +180,8 @@ export const gameSessions = pgTable(
     stage: integer("stage").notNull(),
     // Null for practice.
     tournamentId: text("tournament_id").references(() => tournaments.id),
+    // Set for a head-to-head race between two players.
+    challengeId: text("challenge_id"),
     seed: bigint("seed", { mode: "number" }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -210,6 +212,43 @@ export const gameProgress = pgTable(
     clearedAt: timestamp("cleared_at", { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.userId, t.game, t.stage] })],
+);
+
+export type ChallengeKind = "turns" | "race";
+export type ChallengeStatus = "open" | "active" | "finished" | "cancelled";
+
+/**
+ * One player against another in one of our games. "turns" games store the move list and the server
+ * checks every move by replaying it. "race" games give both players the same board; the better result wins.
+ */
+export const challenges = pgTable(
+  "challenges",
+  {
+    id: id(),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    kind: text("kind").$type<ChallengeKind>().notNull(),
+    stage: integer("stage").notNull().default(1),
+    seed: bigint("seed", { mode: "number" }).notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    // Only this player may accept. Null means anyone can.
+    invitedUserId: text("invited_user_id").references(() => users.id),
+    // Side 0 moves first. Sides are drawn at random when the challenge is accepted.
+    side0Id: text("side0_id").references(() => users.id),
+    side1Id: text("side1_id").references(() => users.id),
+    status: text("status").$type<ChallengeStatus>().notNull().default("open"),
+    moves: jsonb("moves").$type<string[]>().notNull().default([]),
+    turn: integer("turn").notNull().default(0),
+    // null = draw (or not finished).
+    winnerSide: integer("winner_side"),
+    result: text("result"),
+    moveSeconds: integer("move_seconds").notNull().default(120),
+    lastMoveAt: timestamp("last_move_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("challenges_game_status_idx").on(t.game, t.status)],
 );
 
 // Double-entry ledger. Every money movement writes balanced rows with the same txId.
@@ -320,5 +359,6 @@ export type Tournament = typeof tournaments.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type Dispute = typeof disputes.$inferSelect;
 export type GameSession = typeof gameSessions.$inferSelect;
+export type Challenge = typeof challenges.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;

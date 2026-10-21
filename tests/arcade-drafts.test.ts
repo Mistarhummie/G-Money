@@ -102,3 +102,52 @@ describe("drafts verify", () => {
     expect(ms).toBeLessThan(3000);
   });
 });
+
+describe("drafts pvp", () => {
+  const replay = drafts.pvp!.replay;
+
+  /** Both sides play the module's search against each other; returns the move list. */
+  function selfPlay(seed: number, stages: [number, number]) {
+    const s = newGame(seed, 1);
+    const rand = mulberry32(seed);
+    const moves: string[] = [];
+    while (s.result === 0) {
+      const m = playerMove(s, stages[s.turn === 1 ? 0 : 1], rand);
+      moves.push(notation(m));
+      play(s, m);
+    }
+    return { moves, result: s.result };
+  }
+
+  it("replays a two-player game to the right winner", () => {
+    expect(replay(1, [])).toEqual({ turn: 0, over: false, winner: null });
+    expect(replay(1, ["22-18"])).toEqual({ turn: 1, over: false, winner: null });
+    const game = selfPlay(4, [4, 1]);
+    expect(game.result).toBe(1);
+    expect(replay(4, game.moves)).toMatchObject({ over: true, winner: 0 });
+    const other = selfPlay(4, [1, 4]);
+    expect(other.result).toBe(2);
+    expect(replay(4, other.moves)).toMatchObject({ over: true, winner: 1 });
+  });
+
+  it("returns null for illegal, malformed and after-the-end moves", () => {
+    expect(replay(1, ["22-15"])).toBeNull();
+    expect(replay(1, ["11-15"])).toBeNull(); // side 1's piece on side 0's turn
+    expect(replay(1, ["22-18", "22-18"])).toBeNull();
+    expect(replay(1, ["hello"])).toBeNull();
+    expect(replay(1, ["22-18 "])).toBeNull();
+    const game = selfPlay(4, [4, 1]);
+    expect(replay(4, [...game.moves, "11-15"])).toBeNull();
+    expect(replay(4, [...game.moves, game.moves[game.moves.length - 1]])).toBeNull();
+  });
+
+  it("replays a long game quickly", () => {
+    const game = selfPlay(20, [2, 2]);
+    expect(game.moves.length).toBeGreaterThan(100);
+    const t = performance.now();
+    expect(replay(20, game.moves)?.over).toBe(true);
+    const ms = performance.now() - t;
+    console.log(`drafts pvp: ${game.moves.length} plies replayed in ${ms.toFixed(1)} ms`);
+    expect(ms).toBeLessThan(200);
+  });
+});

@@ -5,9 +5,11 @@ import { Card } from "@/components/ui";
 import { getDb } from "@/db";
 import { tournaments } from "@/db/schema";
 import { myProgress, stageBoard, unlockedStages } from "@/lib/arcade";
+import { kindOf, myChallenges, openChallenges } from "@/lib/challenges";
 import { ARCADE, isArcadeKey } from "@/lib/games/arcade";
 import { getCurrentUser } from "@/lib/session";
 import { GameRunner } from "./GameRunner";
+import { NewChallengeForm } from "./Lobby";
 
 export default async function PlayGamePage({
   params,
@@ -27,6 +29,10 @@ export default async function PlayGamePage({
   const progress = user ? await myProgress(db, user.id, key) : [];
   const boardStage = t?.stage ?? unlocked;
   const board = await stageBoard(db, key, boardStage);
+  const race = kindOf(game) === "race";
+  const open = t ? [] : await openChallenges(db, key, user);
+  const mine = user && !t ? await myChallenges(db, user, key) : [];
+  const statusText: Record<string, string> = { open: "Waiting", active: "In play", finished: "Finished" };
   const fmt = (row: { bestScore: number | null; bestTimeMs: number | null }) =>
     game.ranking === "score"
       ? `${(row.bestScore ?? 0).toLocaleString()} ${game.scoreLabel}`
@@ -59,6 +65,70 @@ export default async function PlayGamePage({
         />
       ) : (
         <Link href={`/login?next=/play/${key}`} className="btn-primary text-center">Sign in to play</Link>
+      )}
+
+      {!t && (
+        <Card>
+          <h2 className="font-semibold">Play a friend</h2>
+          <p className="mb-3 text-sm text-white/60">
+            {race
+              ? "You both get the same board, one go each. The better result wins. Free to play."
+              : "Take turns on one board, 2 minutes a move. Free to play."}
+          </p>
+          {user ? (
+            <NewChallengeForm game={key} stages={game.stages} race={race} />
+          ) : (
+            <Link href={`/login?next=/play/${key}`} className="text-sm text-emerald-300 underline">Sign in to challenge someone</Link>
+          )}
+          {open.length > 0 && (
+            <>
+              <h3 className="mb-1 mt-4 text-sm font-semibold">Open challenges</h3>
+              <ul className="flex flex-col gap-1 text-sm">
+                {open.map(({ c, creator }) => (
+                  <li key={c.id} className="flex items-center justify-between">
+                    <span>
+                      {creator ?? "Player"}
+                      {race && <span className="text-white/50"> · stage {c.stage}</span>}
+                      {c.invitedUserId && <span className="text-amber-200"> · for you</span>}
+                    </span>
+                    <Link href={`/challenge/${c.id}`} className="text-emerald-300 underline">View</Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {mine.length > 0 && (
+            <>
+              <h3 className="mb-1 mt-4 text-sm font-semibold">Your matches</h3>
+              <ul className="flex flex-col gap-1 text-sm">
+                {mine.map(({ c, name }) => {
+                  const opponent =
+                    c.status === "open"
+                      ? c.createdBy === user!.id
+                        ? name(c.invitedUserId)
+                        : name(c.createdBy)
+                      : c.side0Id === user!.id
+                        ? name(c.side1Id)
+                        : name(c.side0Id);
+                  const mySide = c.side0Id === user!.id ? 0 : c.side1Id === user!.id ? 1 : null;
+                  const outcome =
+                    c.status !== "finished" ? statusText[c.status] : c.winnerSide === null ? "Draw" : c.winnerSide === mySide ? "Won" : "Lost";
+                  return (
+                    <li key={c.id} className="flex items-center justify-between">
+                      <span>
+                        vs {opponent}
+                        <span className="text-white/50"> · {outcome}</span>
+                      </span>
+                      <Link href={`/challenge/${c.id}`} className="text-emerald-300 underline">
+                        {c.status === "finished" ? "View" : "Open"}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </Card>
       )}
 
       {progress.length > 0 && (

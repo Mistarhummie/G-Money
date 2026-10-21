@@ -29,6 +29,13 @@
       "when": 1792618826166,
       "tag": "0003_drop_puzzle_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792619921191,
+      "tag": "0004_challenges",
+      "breakpoints": true
     }
   ]
 }

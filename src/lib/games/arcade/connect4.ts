@@ -1,5 +1,5 @@
 import { mulberry32, randInt, tooFast } from "./rng";
-import { invalid, type ArcadeGame } from "./types";
+import { invalid, type ArcadeGame, type PvpState } from "./types";
 
 /**
  * Connect Four against the computer. 7 columns x 6 rows, the player (1) drops first, the computer is 2.
@@ -254,6 +254,26 @@ export function scoreFor(stage: number, result: 0 | 1 | 2 | 3, playerMoves: numb
   return 0;
 }
 
+// ---- Player vs player ------------------------------------------------------------------------
+// Side 0 drops first (disc value 1), side 1 second (disc value 2). Each move string is one column digit "0"-"6".
+
+/** Replay a two-player game; null if any move is malformed, illegal or comes after the end. */
+export function replayConnect4(seed: number, moves: string[]): C4State | null {
+  if (moves.length > COLS * ROWS) return null;
+  const s = newGame(seed, 1);
+  for (const t of moves) {
+    if (typeof t !== "string" || !/^[0-6]$/.test(t) || !play(s, Number(t))) return null;
+  }
+  return s;
+}
+
+export function pvpStateOf(s: C4State): PvpState {
+  const turn = s.turn === PLAYER ? 0 : 1;
+  if (s.result === 1 || s.result === 2) return { turn, over: true, winner: s.result === 1 ? 0 : 1, detail: "Four in a row" };
+  if (s.result === 3) return { turn, over: true, winner: null, detail: "Draw: the board is full" };
+  return { turn, over: false, winner: null };
+}
+
 export const connect4: ArcadeGame = {
   key: "connect4",
   name: "Connect Four",
@@ -281,5 +301,12 @@ export const connect4: ArcadeGame = {
       flagged: tooFast(input.length, elapsedMs, MAX_HUMAN_MOVES_PER_SECOND),
       detail: result === 0 ? "Gave up" : result === 2 ? "The computer won" : result === 3 ? "Draw" : undefined,
     };
+  },
+  pvp: {
+    replay(seed, moves) {
+      const s = replayConnect4(seed, moves);
+      return s && pvpStateOf(s);
+    },
+    maxMoveLength: 1,
   },
 };

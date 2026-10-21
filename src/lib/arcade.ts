@@ -1,7 +1,8 @@
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { entries, gameProgress, gameSessions, tournaments, users, type User } from "@/db/schema";
+import { challenges, entries, gameProgress, gameSessions, tournaments, users, type User } from "@/db/schema";
+import { afterRaceRound, RACE_WINDOW_MS } from "./challenges";
 import { UserError } from "./errors";
 import { ARCADE, isArcadeKey, type ArcadeKey } from "./games/arcade";
 
@@ -17,7 +18,7 @@ export async function unlockedStages(db: Db, userId: string, game: ArcadeKey): P
 export async function startSession(
   db: Db,
   user: User,
-  input: { game: string; stage?: number; tournamentId?: string | null },
+  input: { game: string; stage?: number; tournamentId?: string | null; challengeId?: string | null },
   now = new Date(),
 ): Promise<{ sessionId: string; seed: number; stage: number }> {
   if (user.bannedAt) throw new UserError("Your account is suspended");
@@ -26,6 +27,26 @@ export async function startSession(
   return db.transaction(async (tx) => {
     let stage = Math.trunc(Number(input.stage ?? 1));
     const tournamentId = input.tournamentId || null;
+    const challengeId = input.challengeId || null;
+    if (challengeId) {
+      const [c] = await tx.select().from(challenges).where(eq(challenges.id, challengeId)).for("update");
+      if (!c || c.kind !== "race" || c.game !== game.key) throw new UserError("Match not found");
+      if (c.side0Id !== user.id && c.side1Id !== user.id) throw new UserError("You are not playing in this match");
+      if (c.status !== "active" || !c.lastMoveAt || now.getTime() - c.lastMoveAt.getTime() > RACE_WINDOW_MS) {
+        throw new UserError("This match is over");
+      }
+      const [played] = await tx
+        .select({ id: gameSessions.id })
+        .from(gameSessions)
+        .where(and(eq(gameSessions.challengeId, c.id), eq(gameSessions.userId, user.id)));
+      if (played) throw new UserError("You have already played your round");
+      // Both players get the same board, so the better player wins.
+      const [session] = await tx
+        .insert(gameSessions)
+        .values({ userId: user.id, game: game.key, stage: c.stage, challengeId: c.id, seed: c.seed, startedAt: now })
+        .returning();
+      return { sessionId: session.id, seed: Number(c.seed), stage: c.stage };
+    }
     if (tournamentId) {
       const [t] = await tx.select().from(tournaments).where(eq(tournaments.id, tournamentId)).for("update");
       if (!t || t.game !== game.key) throw new UserError("Tournament not found");
@@ -72,7 +93,13 @@ const MAX_INPUT = 500_000;
 
 /** The clock is the server's: from when the seed was handed out to when the input arrives. */
 export async function submitSession(db: Db, user: User, sessionId: string, input: string, now = new Date()): Promise<SessionResult> {
-  return db.transaction(async (tx) => {
+  const res = await submitInTx(db, user, sessionId, input, now);
+  if (res.challengeId) await afterRaceRound(db, res.challengeId, now);
+  return res.result;
+}
+
+async function submitInTx(db: Db, user: User, sessionId: string, input: string, now: Date) {
+  return db.transaction(async (tx): Promise<{ result: SessionResult; challengeId: string | null }> => {
     const [session] = await tx
       .select()
       .from(gameSessions)
@@ -93,7 +120,8 @@ export async function submitSession(db: Db, user: User, sessionId: string, input
       .where(eq(gameSessions.id, session.id));
 
     let unlockedStage: number | undefined;
-    if (verdict.valid && !verdict.flagged) {
+    // Match rounds don't count towards stage progress: the stage was the challenger's pick.
+    if (verdict.valid && !verdict.flagged && !session.challengeId) {
       const [prev] = await tx
         .select()
         .from(gameProgress)
@@ -115,7 +143,10 @@ export async function submitSession(db: Db, user: User, sessionId: string, input
       }
       if (verdict.cleared && !prev?.clearedAt && session.stage < game.stages.length) unlockedStage = session.stage + 1;
     }
-    return { valid: verdict.valid, cleared: verdict.cleared, score, timeMs, flagged: verdict.flagged, detail: verdict.detail, unlockedStage };
+    return {
+      result: { valid: verdict.valid, cleared: verdict.cleared, score, timeMs, flagged: verdict.flagged, detail: verdict.detail, unlockedStage },
+      challengeId: session.challengeId,
+    };
   });
 }
 

@@ -1,5 +1,5 @@
 import { mulberry32, tooFast } from "./rng";
-import { invalid, type ArcadeGame } from "./types";
+import { invalid, type ArcadeGame, type PvpState } from "./types";
 
 /**
  * Chess against the computer. Our own rules engine on a 0x88 board (square = rank * 16 + file,
@@ -698,6 +698,35 @@ export function replay(seed: number, stage: number, input: string): Replay {
   return { pos, status, playerMoves: tokens.length };
 }
 
+// ---------------------------------------------------------------- two players
+
+export type PvpReplay = { pos: Position; status: GameStatus; lastMove: number | null };
+
+/** Replays a two-player game (one UCI move per element, White first). Null if any move is illegal or after the end. */
+export function replayPvp(moves: string[]): PvpReplay | null {
+  if (moves.length > MAX_PLIES) return null;
+  let pos = startPosition();
+  let status: GameStatus = { over: false };
+  let lastMove: number | null = null;
+  for (const uci of moves) {
+    if (status.over || typeof uci !== "string") return null;
+    const m = fromUci(pos, uci);
+    if (m === null) return null;
+    pos = play(pos, m);
+    lastMove = m;
+    status = gameStatus(pos);
+  }
+  return { pos, status, lastMove };
+}
+
+/** Side 0 is White. Draws end the game with no winner. */
+export function pvpState(r: PvpReplay): PvpState {
+  const turn = r.pos.side === 1 ? 0 : 1;
+  if (!r.status.over) return { turn, over: false, winner: null };
+  const winner = r.status.winner === 1 ? 0 : r.status.winner === -1 ? 1 : null;
+  return { turn, over: true, winner, detail: r.status.reason };
+}
+
 export const chessbot: ArcadeGame = {
   key: "chessbot",
   name: "Chess",
@@ -708,6 +737,13 @@ export const chessbot: ArcadeGame = {
   scoreLabel: "points",
   stages: STAGES.map(({ name, goal }) => ({ name, goal })),
   timeLimitMs: 30 * 60 * 1000,
+  pvp: {
+    replay(_seed, moves) {
+      const r = replayPvp(moves);
+      return r && pvpState(r);
+    },
+    maxMoveLength: 5,
+  },
   verify({ seed, stage, input, elapsedMs }) {
     if (input.length > 1000) return invalid("Too many moves");
     const r = replay(seed, stage, input);
