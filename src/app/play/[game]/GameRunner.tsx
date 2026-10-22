@@ -4,11 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { startGameAction, submitGameAction } from "@/app/actions";
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
+import { HowToPlay } from "@/components/games/guide/HowToPlay";
 import { GAME_COMPONENTS } from "@/components/games/registry";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
 
 type Props = {
   game: ArcadeKey;
+  name: string;
+  /** How two-player matches of this game work, for the guide. */
+  pvp: "turns" | "race";
   stages: Stage[];
   unlocked: number;
   ranking: "score" | "time";
@@ -22,7 +26,7 @@ type Props = {
 
 type Result = { valid: boolean; cleared: boolean; score: number; timeMs: number; flagged: boolean; detail?: string; unlockedStage?: number };
 
-export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, tournament, challenge = null }: Props) {
+export function GameRunner({ game, name, pvp, stages, unlocked, ranking, scoreLabel, kind, tournament, challenge = null }: Props) {
   const router = useRouter();
   const [stage, setStage] = useState(challenge?.stage ?? tournament?.stage ?? unlocked);
   const [session, setSession] = useState<{ id: string; seed: number; stage: number; startedAt: number } | null>(null);
@@ -93,6 +97,8 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
       </p>
 
       <GameFrame
+        aspect={game === "bao" ? 1.8 : 1}
+        help={<HowToPlay game={game} name={name} stages={stages} pvp={pvp} />}
         toolbar={
           session ? (
             <div className="flex justify-between font-mono text-sm text-white/80">

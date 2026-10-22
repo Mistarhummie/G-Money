@@ -39,7 +39,18 @@ type Piece = { id: number; x: number; y: number; vx: number; vy: number; rot: nu
  * Wraps a game: adds a fullscreen button, popups, confetti and shake.
  * Fullscreen uses the browser's real fullscreen where it exists, and fills the window otherwise (iPhone Safari).
  */
-export function GameFrame({ children, toolbar }: { children: ReactNode; toolbar?: ReactNode }) {
+export function GameFrame({
+  children,
+  toolbar,
+  help,
+  aspect = 1,
+}: {
+  children: ReactNode;
+  toolbar?: ReactNode;
+  help?: ReactNode;
+  /** Board width over height, so wide boards (Bao) can use the whole width of a landscape screen. */
+  aspect?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [pops, setPops] = useState<Pop[]>([]);
   const [pieces, setPieces] = useState<Piece[]>([]);
@@ -153,6 +164,7 @@ export function GameFrame({ children, toolbar }: { children: ReactNode; toolbar?
         `}</style>
         <div className="mb-2 flex items-center gap-2">
           <div className="min-w-0 flex-1">{toolbar}</div>
+          {help}
           <button
             type="button"
             onClick={toggle}
@@ -162,7 +174,10 @@ export function GameFrame({ children, toolbar }: { children: ReactNode; toolbar?
             {fullscreen ? "✕ Exit" : "⛶ Full screen"}
           </button>
         </div>
-        <div className={`relative ${fullscreen ? "mx-auto my-auto w-full max-w-[min(100%,calc(100dvh-7rem))]" : ""}`}>
+        <div
+          className={`relative ${fullscreen ? "mx-auto my-auto w-full" : ""}`}
+          style={fullscreen ? { maxWidth: `min(100%, calc((100dvh - 7rem) * ${aspect}))` } : undefined}
+        >
           <div style={shaking ? { animation: "gfx-shake .45s ease-out" } : undefined}>{children}</div>
           <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
             {pops.map((p, i) => (

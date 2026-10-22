@@ -32,6 +32,7 @@ export default async function ChallengePage({ params }: { params: Promise<{ id: 
         <MatchClient
           initial={view}
           game={game.key}
+          name={game.name}
           stages={game.stages}
           ranking={game.ranking}
           scoreLabel={game.scoreLabel}

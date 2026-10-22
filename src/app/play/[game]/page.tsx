@@ -56,6 +56,8 @@ export default async function PlayGamePage({
       {user ? (
         <GameRunner
           game={key}
+          name={game.name}
+          pvp={kindOf(game)}
           stages={game.stages}
           unlocked={unlocked}
           ranking={game.ranking}

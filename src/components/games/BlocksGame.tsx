@@ -56,6 +56,10 @@ const KEYS: Record<string, Action> = {
   " ": "H",
 };
 
+
+/** The game hands itself in this long before the server's time limit, leaving room for network delays. */
+const END_MS = MAX_MS - 15_000;
+
 export default function BlocksGame({ seed, stage, onFinish }: GameComponentProps) {
   const { target } = stageConfig(stage);
   const [preview] = useState(() => newGame(seed, stage));
@@ -226,16 +230,24 @@ export default function BlocksGame({ seed, stage, onFinish }: GameComponentProps
       }
       if (steps) {
         const played = ticks.current * TICK_MS;
-        if (!warned.current.minute && played >= MAX_MS - 60_000) {
+        if (!warned.current.minute && played >= END_MS - 60_000) {
           warned.current.minute = true;
           say("1 minute left", { tone: "warn", emoji: "⏳" }, true);
         }
-        if (!warned.current.ten && played >= MAX_MS - 10_000) {
+        if (!warned.current.ten && played >= END_MS - 10_000) {
           warned.current.ten = true;
           say("Last 10 seconds", { tone: "bad", emoji: "⏰" }, true);
         }
       }
       if (finished.current) return;
+      if (s.alive && ticks.current * TICK_MS >= END_MS) {
+        // Out of time: hand in the game as it stands, before the server's limit would throw it out.
+        finished.current = true;
+        setOver(true);
+        finishRef.current(encodeInput(actions.current, ticks.current));
+        fxRef.current.pop("Time's up", { tone: "warn", emoji: "⏰" });
+        return;
+      }
       if (!s.alive) {
         // Topped out: the game ends on this tick.
         finished.current = true;

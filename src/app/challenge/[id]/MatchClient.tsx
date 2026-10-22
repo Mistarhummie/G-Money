@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { acceptChallengeAction, cancelChallengeAction, playMoveAction, resignAction } from "@/app/actions";
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
+import { HowToPlay } from "@/components/games/guide/HowToPlay";
 import { PVP_COMPONENTS } from "@/components/games/pvp/registry";
 import type { ChallengeView } from "@/lib/challenges";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
@@ -12,6 +13,7 @@ import { GameRunner } from "@/app/play/[game]/GameRunner";
 type Props = {
   initial: ChallengeView;
   game: ArcadeKey;
+  name: string;
   stages: Stage[];
   ranking: "score" | "time";
   scoreLabel: string;
@@ -20,7 +22,7 @@ type Props = {
 
 const POLL_MS = 2000;
 
-export function MatchClient({ initial, game, stages, ranking, scoreLabel, kind }: Props) {
+export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, kind }: Props) {
   const router = useRouter();
   const [view, setView] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +145,8 @@ export function MatchClient({ initial, game, stages, ranking, scoreLabel, kind }
 
           {view.kind === "turns" && Board && (
             <GameFrame
+              aspect={game === "bao" ? 1.8 : 1}
+              help={<HowToPlay game={game} name={name} stages={stages} pvp="turns" />}
               toolbar={
                 <span className={myTurn ? "text-sm font-semibold text-emerald-300" : "text-sm text-white/60"}>
                   {view.status === "active" ? (myTurn ? "Your move" : `${view.names[view.turn]} to move`) : "Game over"}
@@ -168,6 +172,8 @@ export function MatchClient({ initial, game, stages, ranking, scoreLabel, kind }
           {view.kind === "race" && view.status === "active" && view.mySide !== null && !view.iPlayed && (
             <GameRunner
               game={game}
+              name={name}
+              pvp="race"
               stages={stages}
               unlocked={view.stage}
               ranking={ranking}
