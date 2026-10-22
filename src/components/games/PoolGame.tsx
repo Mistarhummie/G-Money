@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PoolBoard, PoolHeader, type Playback } from "@/components/games/pool/PoolBoard";
+import { usePoolPopups } from "@/components/games/pool/poolFx";
 import { applyShot, computerMove, encodePlace, encodeShot, initialState, placeCue, shotError, type Shot, type State } from "@/lib/games/arcade/pool";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
 
@@ -17,6 +18,7 @@ export default function PoolGame({ seed, stage, onFinish }: GameComponentProps) 
   const timers = useRef<number[]>([]);
   const finished = useRef(false);
   const keys = useRef(0);
+  const popups = usePoolPopups(0, ["You", "Computer"]);
 
   useEffect(
     () => () => {
@@ -47,6 +49,7 @@ export default function PoolGame({ seed, stage, onFinish }: GameComponentProps) 
     const next = after.current;
     setPlayback(null);
     if (!next || finished.current) return;
+    popups.shotOver(game, next);
     setGame(next);
     if (next.winner !== null) later(finish, 1200);
     else if (next.turn === 1) later(() => computerTurn(next), 600);
@@ -116,6 +119,7 @@ export default function PoolGame({ seed, stage, onFinish }: GameComponentProps) 
         onShoot={shoot}
         playback={playback}
         onPlaybackDone={playbackDone}
+        onPot={(ball) => popups.pot(game, ball)}
         header={<PoolHeader game={game} names={["You", "Computer"]} status={status} active={game.winner === null ? game.turn : null} />}
         idleText={`Shot ${game.shots + 1}`}
         extra={

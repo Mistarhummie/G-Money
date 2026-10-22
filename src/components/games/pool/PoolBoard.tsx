@@ -3,6 +3,23 @@
 /** The pool table UI shared by the vs-computer game and the two-player board. */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useGameFx } from "@/components/games/fx/GameFx";
+import { ease, prefersReducedMotion } from "@/components/games/fx/motion";
+import {
+  colorOf,
+  drawScene,
+  freshOrients,
+  POCKET_DRAW,
+  RAIL,
+  roll,
+  touch,
+  VH,
+  VW,
+  type Drop,
+  type Orient,
+  type Sprites,
+  type Stick,
+} from "@/components/games/pool/render";
 import {
   FRAMES_PER_SECOND,
   groupOf,
@@ -10,7 +27,6 @@ import {
   HEAD_Y,
   legalTargets,
   placementError,
-  POCKETS,
   R,
   remaining,
   W,
@@ -19,18 +35,16 @@ import {
   type State,
 } from "@/lib/games/arcade/pool";
 
-export const RAIL = 70; // drawn rail width, mm
-export const VW = W + 2 * RAIL;
-export const VH = H + 2 * RAIL;
-export const SPEED = 1.5; // animation plays the simulated frames 1.5x faster than real time
+export { colorOf, RAIL, VH, VW };
+export const SPEED = 1; // the simulated frames play at true speed: real acceleration and deceleration
+export const FAST_FORWARD = 4; // a tap on the table while balls roll speeds the rest of the shot up this much
 export const AIM_REACH = 3000; // the aim point sent to the server sits this far from the cue ball
+const MAX_POWER_SPEED = 4000; // mm/s at power 100 (matches the physics), to read a shot's power back from its frames
 
-const BASE = ["#f5f5ef", "#f2c21b", "#1d55c9", "#d42a2a", "#6a2fa3", "#ee7a16", "#15803d", "#7f1d1d", "#111111"];
-export const colorOf = (n: number) => (n <= 8 ? BASE[n] : BASE[n - 8]);
+/** How far the cue tip rests behind the cue ball while aiming, for a power of 0..1 (mm). */
+const restBack = (p: number) => 30 + 150 * p;
 
 export type Vec = { x: number; y: number };
-/** What the canvas shows besides the balls: the aim, and where the cue ball is being placed. */
-export type Overlay = { aim: Vec | null; place: { at: Vec; ok: boolean } | null };
 
 /** Aim point (integer mm) a long way from the cue ball in direction `dir`. */
 export const targetFor = (cue: Vec, dir: Vec) => ({ x: Math.round(cue.x + dir.x * AIM_REACH), y: Math.round(cue.y + dir.y * AIM_REACH) });
@@ -84,7 +98,10 @@ export function castAim(xs: Float32Array, cue: Vec, target: Vec) {
       hit = i;
     }
   }
-  const walls = [d.x < 0 ? (R - cue.x) / d.x : d.x > 0 ? (W - R - cue.x) / d.x : Infinity, d.y < 0 ? (R - cue.y) / d.y : d.y > 0 ? (H - R - cue.y) / d.y : Infinity];
+  const walls = [
+    d.x < 0 ? (R - cue.x) / d.x : d.x > 0 ? (W - R - cue.x) / d.x : Infinity,
+    d.y < 0 ? (R - cue.y) / d.y : d.y > 0 ? (H - R - cue.y) / d.y : Infinity,
+  ];
   const wall = Math.max(0, Math.min(...walls));
   if (wall < best) return { end: { x: cue.x + d.x * wall, y: cue.y + d.y * wall }, hit: -1 };
   return { end: { x: cue.x + d.x * best, y: cue.y + d.y * best }, hit };
@@ -97,103 +114,6 @@ export function positionsOf(s: State): Float32Array {
     f[2 * i + 1] = b.on ? b.y : NaN;
   });
   return f;
-}
-
-export function drawTable(canvas: HTMLCanvasElement, xs: Float32Array, overlay: Overlay, showHead: boolean) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const k = canvas.width / VW;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(k, 0, 0, k, RAIL * k, RAIL * k);
-  // Rails and cloth.
-  ctx.fillStyle = "#3b2414";
-  ctx.beginPath();
-  ctx.roundRect(-RAIL, -RAIL, VW, VH, 40);
-  ctx.fill();
-  ctx.fillStyle = "#0f6b3e";
-  ctx.fillRect(0, 0, W, H);
-  // Head string and foot spot.
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
-  ctx.lineWidth = 4;
-  if (showHead) {
-    ctx.setLineDash([20, 20]);
-    ctx.beginPath();
-    ctx.moveTo(0, HEAD_Y);
-    ctx.lineTo(W, HEAD_Y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  // Pockets.
-  ctx.fillStyle = "#050505";
-  for (const p of POCKETS) {
-    ctx.beginPath();
-    ctx.arc(p.x === -12 ? -4 : p.x === W + 12 ? W + 4 : p.x, p.y, p.x < 0 || p.x > W ? 50 : 58, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Aim line and ghost ball.
-  const cue = Number.isNaN(xs[0]) ? null : { x: xs[0], y: xs[1] };
-  if (overlay.aim && cue) {
-    const { end, hit } = castAim(xs, cue, overlay.aim);
-    ctx.strokeStyle = "rgba(255,255,255,0.75)";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(cue.x, cue.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(end.x, end.y, R, 0, Math.PI * 2);
-    ctx.stroke();
-    if (hit > 0) {
-      const bx = xs[2 * hit];
-      const by = xs[2 * hit + 1];
-      const d = norm(bx - end.x, by - end.y);
-      ctx.strokeStyle = "rgba(250,204,21,0.8)";
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.lineTo(bx + d.x * 280, by + d.y * 280);
-      ctx.stroke();
-    }
-  }
-  // Balls.
-  for (let i = 15; i >= 0; i--) {
-    const x = xs[2 * i];
-    const y = xs[2 * i + 1];
-    if (Number.isNaN(x)) continue;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, R, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.fillStyle = i >= 9 ? "#f5f5ef" : colorOf(i);
-    ctx.fillRect(x - R, y - R, 2 * R, 2 * R);
-    if (i >= 9) {
-      ctx.fillStyle = colorOf(i);
-      ctx.fillRect(x - R, y - R * 0.55, 2 * R, R * 1.1);
-    }
-    if (i > 0) {
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(x, y, R * 0.42, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#000";
-      ctx.font = `bold ${R * 0.62}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(i), x, y + 1);
-    }
-    ctx.restore();
-  }
-  // Ball in hand marker.
-  if (overlay.place) {
-    const { at, ok } = overlay.place;
-    ctx.strokeStyle = ok ? "rgba(52,211,153,0.9)" : "rgba(248,113,113,0.95)";
-    ctx.lineWidth = 6;
-    ctx.setLineDash([12, 10]);
-    ctx.beginPath();
-    ctx.arc(at.x, at.y, R + 22, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
 }
 
 export function GroupChips({ s, g }: { s: State; g: Group | null }) {
@@ -224,6 +144,8 @@ type BoardProps = {
   onShoot: (place: [number, number] | null, shot: Shot) => void;
   playback: Playback | null;
   onPlaybackDone: (key: number) => void;
+  /** Called as each ball drops into a pocket while a shot plays. */
+  onPot?: (ball: number) => void;
   /** Players, status and last event, shown above the table. */
   header: ReactNode;
   /** Shown under the Shoot button when the viewer cannot shoot. */
@@ -232,7 +154,37 @@ type BoardProps = {
   extra?: ReactNode;
 };
 
-export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlaybackDone, header, idleText, extra }: BoardProps) {
+/** The cue ball's direction and power (0..1) at the start of a recorded shot, read from its frames. */
+function strokeOf(frames: Float32Array[]): { dir: Vec; p: number } {
+  const f0 = frames[0];
+  for (let i = 1; i < Math.min(frames.length, 40); i++) {
+    const dx = frames[i][0] - f0[0];
+    const dy = frames[i][1] - f0[1];
+    if (Number.isNaN(dx) || Number.isNaN(dy)) break;
+    const d = Math.hypot(dx, dy);
+    if (d > 0.5) return { dir: { x: dx / d, y: dy / d }, p: Math.min(1, ((d / i) * FRAMES_PER_SECOND) / MAX_POWER_SPEED) };
+  }
+  return { dir: { x: 0, y: -1 }, p: 0.5 };
+}
+
+/** Ball positions at fractional frame `f`, interpolated so the motion is smooth on any screen refresh rate. */
+function framesAt(frames: Float32Array[], f: number, out: Float32Array) {
+  const i0 = Math.min(frames.length - 1, Math.floor(f));
+  const i1 = Math.min(frames.length - 1, i0 + 1);
+  const t = f - i0;
+  const a = frames[i0];
+  const b = frames[i1];
+  for (let j = 0; j < 32; j++) out[j] = Number.isNaN(a[j]) || Number.isNaN(b[j]) ? a[j] : a[j] + (b[j] - a[j]) * t;
+}
+
+function nearestPocket(x: number, y: number) {
+  let best = POCKET_DRAW[0];
+  for (const p of POCKET_DRAW) if (Math.hypot(p.x - x, p.y - y) < Math.hypot(best.x - x, best.y - y)) best = p;
+  return best;
+}
+
+export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlaybackDone, onPot, header, idleText, extra }: BoardProps) {
+  const fx = useGameFx();
   const [power, setPower] = useState(70);
   const [cue, setCue] = useState<Vec>(() => defaultCue(game));
   const [dir, setDir] = useState<Vec>(() => defaultDir(game, defaultCue(game)));
@@ -243,8 +195,15 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
   const wrapRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<Float32Array | null>(null); // the animation frame on screen, if animating
   const aimRef = useRef<Vec | null>(null); // someone else's cue line, shown before their shot plays
+  const stickRef = useRef<Stick | null>(null); // the cue stick while a shot plays
+  const dropsRef = useRef<Drop[]>([]); // balls falling into pockets
+  const fastRef = useRef(1); // playback speed (a tap fast-forwards)
+  const orientsRef = useRef<Orient[] | null>(null); // how each ball has turned as it rolled
+  const spritesRef = useRef<Sprites>([]);
+  const lastXsRef = useRef<Float32Array | null>(null);
   const drag = useRef<"cue" | "aim" | null>(null);
   const doneRef = useRef(onPlaybackDone);
+  const potRef = useRef(onPot);
 
   // A new table: start the aim (and the cue ball in hand) from sensible defaults.
   if (shown !== game) {
@@ -260,35 +219,66 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
   const cuePos: Vec = placing ? cue : { x: game.balls[0].x, y: game.balls[0].y };
   const aimTarget = myTurn ? targetFor(cuePos, dir) : null;
 
-  // Size the canvas to its container (max 360 css px wide, about 3/4 of the screen height).
+  // Size the canvas from its container and the screen height (more room in full screen).
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const fit = () => setWidth(Math.floor(Math.min(360, el.clientWidth, (window.innerHeight * 0.75 * VW) / VH)));
+    const fit = () => {
+      const room = fx.fullscreen ? window.innerHeight - 280 : window.innerHeight * 0.75;
+      setWidth(Math.floor(Math.max(180, Math.min(el.clientWidth, (room * VW) / VH))));
+    };
     const ro = new ResizeObserver(fit);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [fx.fullscreen]);
 
   function paint() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const xs = frameRef.current ?? positionsOf(game);
+    const xs = frameRef.current ? frameRef.current.slice() : positionsOf(game);
     if (!frameRef.current && placing) {
       xs[0] = cue.x;
       xs[1] = cue.y;
     }
-    const overlay: Overlay = {
-      aim: frameRef.current ? null : (aimTarget ?? aimRef.current),
+    // Turn each ball by how far it travelled since the last picture, so stripes and numbers roll.
+    const orients = (orientsRef.current ??= freshOrients());
+    const prev = lastXsRef.current;
+    if (prev) {
+      for (let i = 0; i < 16; i++) {
+        const dx = xs[2 * i] - prev[2 * i];
+        const dy = xs[2 * i + 1] - prev[2 * i + 1];
+        if (Number.isNaN(dx) || Number.isNaN(dy) || (dx === 0 && dy === 0) || Math.hypot(dx, dy) > 150) continue;
+        roll(orients[i], dx, dy);
+        touch(spritesRef.current, i);
+      }
+    }
+    lastXsRef.current = xs;
+
+    const cueNow = Number.isNaN(xs[0]) ? null : { x: xs[0], y: xs[1] };
+    const aimPoint = aimRef.current ?? (frameRef.current ? null : aimTarget);
+    const stick: Stick | null =
+      stickRef.current ?? (!frameRef.current && myTurn && cueNow ? { at: cueNow, dir, back: restBack(power / 100), alpha: placeErr ? 0.5 : 1 } : null);
+    drawScene(canvas, {
+      xs,
+      showHead: game.isBreak,
+      orients,
+      sprites: spritesRef.current,
+      aim: aimPoint && cueNow ? { cue: cueNow, ...castAim(xs, cueNow, aimPoint) } : null,
       place: placing && !frameRef.current ? { at: cue, ok: !placeErr } : null,
-    };
-    drawTable(canvas, xs, overlay, game.isBreak);
+      stick,
+      drops: dropsRef.current,
+    });
   }
   const paintRef = useRef(paint);
   // Redraw whenever anything shown changes (animation frames draw themselves).
   useEffect(() => {
     paintRef.current = paint;
     doneRef.current = onPlaybackDone;
+    potRef.current = onPot;
     const canvas = canvasRef.current;
     if (canvas) {
       const dpr = window.devicePixelRatio || 1;
@@ -302,36 +292,95 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
     paint();
   });
 
-  // Play a recorded shot: the cue line first (if any), then the frames, then report back.
+  // Play a recorded shot: the cue line (if any), the cue stick drawing back and striking,
+  // then the simulated frames at true speed, with balls sinking into pockets as they drop.
   useEffect(() => {
     if (!playback) return;
+    const { frames } = playback;
+    const stroke = strokeOf(frames);
+    const reduced = prefersReducedMotion();
+    const at = { x: frames[0][0], y: frames[0][1] };
+    const aimMs = playback.aim ? playback.aimMs : 0;
+    const rest = restBack(stroke.p);
+    const pullTo = rest + 70 + 230 * stroke.p;
+    const pullMs = reduced ? 0 : 200 + 120 * stroke.p;
+    const strikeMs = reduced ? 0 : 120 - 60 * stroke.p; // harder shots strike faster
+    const hitAt = aimMs + pullMs + strikeMs;
+    const out = new Float32Array(32);
+    let drops: (Drop & { t0: number })[] = [];
     let raf = 0;
+    let t0 = -1;
+    let last = 0;
+    let sim = 0; // simulated seconds played so far
+    let seen = 0; // frames checked for pots
+
+    fastRef.current = 1;
     aimRef.current = playback.aim;
+    frameRef.current = frames[0];
+    stickRef.current = reduced || Number.isNaN(at.x) ? null : { at, dir: stroke.dir, back: rest, alpha: 1 };
+    dropsRef.current = [];
     paintRef.current();
-    const timer = window.setTimeout(
-      () => {
-        aimRef.current = null;
-        const t0 = performance.now();
-        const tick = (now: number) => {
-          const idx = Math.floor(((now - t0) / 1000) * FRAMES_PER_SECOND * SPEED);
-          if (idx >= playback.frames.length - 1) {
-            frameRef.current = null;
-            doneRef.current(playback.key);
-            return;
-          }
-          frameRef.current = playback.frames[idx];
-          paintRef.current();
-          raf = requestAnimationFrame(tick);
-        };
+
+    const tick = (now: number) => {
+      if (t0 < 0) t0 = last = now;
+      const t = now - t0;
+      if (t < hitAt) {
+        if (t >= aimMs && stickRef.current) {
+          aimRef.current = null;
+          const back =
+            t < aimMs + pullMs
+              ? rest + (pullTo - rest) * ease.outCubic((t - aimMs) / pullMs)
+              : pullTo + (-2 - pullTo) * ease.inQuad((t - aimMs - pullMs) / strikeMs);
+          stickRef.current = { at, dir: stroke.dir, back, alpha: 1 };
+        }
+        last = now;
+        paintRef.current();
         raf = requestAnimationFrame(tick);
-      },
-      playback.aim ? playback.aimMs : 0,
-    );
+        return;
+      }
+      aimRef.current = null;
+      sim += ((now - last) / 1000) * fastRef.current;
+      last = now;
+      // The stick follows through after the strike, then fades away.
+      const ts = t - hitAt;
+      stickRef.current =
+        reduced || ts > 450 || Number.isNaN(at.x) ? null : { at, dir: stroke.dir, back: -2 - 55 * ease.outCubic(Math.min(1, ts / 220)), alpha: 1 - ts / 450 };
+
+      const f = Math.min(frames.length - 1, sim * FRAMES_PER_SECOND * SPEED);
+      const idx = Math.floor(f);
+      for (; seen < idx; seen++) {
+        const a = frames[seen];
+        const b = frames[seen + 1];
+        for (let n = 0; n < 16; n++) {
+          if (Number.isNaN(a[2 * n]) || !Number.isNaN(b[2 * n])) continue;
+          const pk = nearestPocket(a[2 * n], a[2 * n + 1]);
+          drops.push({ n, x: a[2 * n], y: a[2 * n + 1], px: pk.x, py: pk.y, p: 0, t0: now });
+          potRef.current?.(n);
+        }
+      }
+      for (const d of drops) d.p = reduced ? 1 : (now - d.t0) / 380;
+      drops = drops.filter((d) => d.p < 1);
+      dropsRef.current = drops;
+
+      if (idx >= frames.length - 1 && !drops.length) {
+        frameRef.current = null;
+        stickRef.current = null;
+        dropsRef.current = [];
+        doneRef.current(playback.key);
+        return;
+      }
+      framesAt(frames, f, out);
+      frameRef.current = out;
+      paintRef.current();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
     return () => {
-      clearTimeout(timer);
       cancelAnimationFrame(raf);
       frameRef.current = null;
       aimRef.current = null;
+      stickRef.current = null;
+      dropsRef.current = [];
     };
   }, [playback]);
 
@@ -346,6 +395,10 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
   }
 
   function pointer(e: React.PointerEvent<HTMLCanvasElement>, phase: "down" | "move") {
+    if (playback && phase === "down") {
+      fastRef.current = FAST_FORWARD; // impatient? the rest of the shot plays faster
+      return;
+    }
     if (!myTurn) return;
     const p = toTable(e);
     if (phase === "down") {
@@ -382,18 +435,22 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const target = aimTarget ? castAim(positionsOf({ ...game, balls: game.balls.map((b, i) => (i === 0 ? { ...b, ...cuePos, on: true } : b)) }), cuePos, aimTarget) : null;
-  const targetName = target && target.hit > 0 ? (target.hit === 8 ? "the 8" : `the ${target.hit} (${groupOf(target.hit) === "solids" ? "solid" : "stripe"})`) : "a cushion";
+  const target = aimTarget
+    ? castAim(positionsOf({ ...game, balls: game.balls.map((b, i) => (i === 0 ? { ...b, ...cuePos, on: true } : b)) }), cuePos, aimTarget)
+    : null;
+  const targetName =
+    target && target.hit > 0 ? (target.hit === 8 ? "the 8" : `the ${target.hit} (${groupOf(target.hit) === "solids" ? "solid" : "stripe"})`) : "a cushion";
+  const powerHue = Math.round(130 - power * 1.3); // green for a soft touch, red for a smash
 
   return (
     <div className="flex flex-col gap-2 select-none">
-      <div className="rounded-2xl bg-black/30 p-2">
+      <div className="rounded-2xl bg-gradient-to-b from-emerald-950/60 to-black/40 p-2 ring-1 ring-emerald-400/10">
         {header}
         <div ref={wrapRef} className="flex justify-center">
           <canvas
             ref={canvasRef}
             style={{ width, height: (width * VH) / VW, touchAction: "none" }}
-            className="rounded-xl"
+            className="rounded-xl shadow-[0_12px_40px_-8px_rgba(0,0,0,0.8)]"
             onPointerDown={(e) => pointer(e, "down")}
             onPointerMove={(e) => pointer(e, "move")}
             onPointerUp={() => (drag.current = null)}
@@ -406,22 +463,50 @@ export function PoolBoard({ game, canShoot: allowed, onShoot, playback, onPlayba
       <div className="flex flex-col gap-2 rounded-2xl bg-white/5 p-3">
         <div className="flex items-center gap-2 text-sm text-white/70">
           <span className="w-14">Power</span>
-          <input type="range" min={1} max={100} value={power} onChange={(e) => setPower(Number(e.target.value))} className="flex-1 accent-emerald-500" aria-label="Power" />
-          <span className="w-8 text-right font-mono">{power}</span>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            value={power}
+            onChange={(e) => setPower(Number(e.target.value))}
+            className="flex-1"
+            style={{ accentColor: `hsl(${powerHue} 85% 52%)` }}
+            aria-label="Power"
+          />
+          <span className="w-8 text-right font-mono" style={{ color: `hsl(${powerHue} 90% 65%)` }}>
+            {power}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => nudge(-0.25)} disabled={!myTurn} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-40" aria-label="Aim left">
+          <button
+            type="button"
+            onClick={() => nudge(-0.25)}
+            disabled={!myTurn}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-40"
+            aria-label="Aim left"
+          >
             ◀
           </button>
-          <button type="button" onClick={shoot} disabled={!myTurn || !!placeErr} className="flex-1 rounded-lg bg-emerald-500 py-2 font-bold text-emerald-950 transition active:scale-95 disabled:opacity-40">
+          <button
+            type="button"
+            onClick={shoot}
+            disabled={!myTurn || !!placeErr}
+            className="flex-1 rounded-lg bg-gradient-to-r from-emerald-400 via-lime-400 to-amber-300 py-2 font-bold text-emerald-950 shadow-lg shadow-emerald-500/20 transition active:scale-95 disabled:opacity-40"
+          >
             Shoot
           </button>
-          <button type="button" onClick={() => nudge(0.25)} disabled={!myTurn} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-40" aria-label="Aim right">
+          <button
+            type="button"
+            onClick={() => nudge(0.25)}
+            disabled={!myTurn}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm disabled:opacity-40"
+            aria-label="Aim right"
+          >
             ▶
           </button>
         </div>
         <div className="flex justify-between gap-2 text-xs text-white/60">
-          <span>{myTurn ? (placeErr ? placeErr : `Aiming at ${targetName}`) : idleText}</span>
+          <span>{myTurn ? (placeErr ? placeErr : `Aiming at ${targetName}`) : playback ? "Tap the table to speed up" : idleText}</span>
           {extra}
         </div>
       </div>

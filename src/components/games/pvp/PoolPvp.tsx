@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PoolBoard, PoolHeader, type Playback } from "@/components/games/pool/PoolBoard";
+import { usePoolPopups } from "@/components/games/pool/poolFx";
 import { applyShot, encodePlace, encodeShot, initialState, parseInput, placeCue, replayPvp, shotError, type Shot, type State } from "@/lib/games/arcade/pool";
 import type { PvpBoardProps } from "@/lib/games/arcade/types";
 
@@ -34,6 +35,7 @@ export default function PoolPvp({ seed, moves, mySide, names, onMove, disabled }
   const [after, setAfter] = useState<State | null>(null); // the table once the playing shot is over
   // My move, shown before the server has accepted it.
   const [mine, setMine] = useState<{ base: number; move: string; sawDisabled: boolean } | null>(null);
+  const popups = usePoolPopups(mySide, names);
 
   // The move list changed: show the new move (animated unless it is the one I just played).
   if (moves !== seen) {
@@ -72,7 +74,10 @@ export default function PoolPvp({ seed, moves, mySide, names, onMove, disabled }
   function playbackDone(key: number) {
     if (key !== playback?.key) return;
     setPlayback(null);
-    if (after) setTable(after);
+    if (after) {
+      popups.shotOver(table, after);
+      setTable(after);
+    }
     setAfter(null);
   }
 
@@ -111,6 +116,7 @@ export default function PoolPvp({ seed, moves, mySide, names, onMove, disabled }
       onShoot={shoot}
       playback={playback}
       onPlaybackDone={playbackDone}
+      onPot={(ball) => popups.pot(table, ball)}
       header={<PoolHeader game={table} names={names} status={status} active={table.winner === null ? table.turn : null} />}
       idleText={mySide === null ? "Watching" : `Shot ${table.shots + 1}`}
     />

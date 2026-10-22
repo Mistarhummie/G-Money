@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { inCheck, pvpState, replayPvp, toUci } from "@/lib/games/arcade/chessbot";
 import type { PvpBoardProps } from "@/lib/games/arcade/types";
 import { CapturedTray, ChessBoard, KEYBOARD_HINT } from "../chessbot/ChessBoard";
+import { useGameFx } from "../fx/GameFx";
 
 /** Two-player chess. Side 0 is White. The board is turned so the viewer's pieces are at the bottom. */
 export default function ChessbotPvp({ moves, mySide, names, onMove, disabled }: PvpBoardProps) {
@@ -12,6 +13,7 @@ export default function ChessbotPvp({ moves, mySide, names, onMove, disabled }: 
   const [pending, setPending] = useState<{ base: number; uci: string } | null>(null);
   const shown = useMemo(() => (pending && disabled && pending.base === moves.length ? [...moves, pending.uci] : moves), [moves, pending, disabled]);
   const game = useMemo(() => replayPvp(shown) ?? replayPvp(moves), [shown, moves]);
+  const { fullscreen } = useGameFx();
 
   if (!game) return <div className="rounded-2xl bg-black/30 p-6 text-center text-white/70">This game could not be loaded.</div>;
 
@@ -54,11 +56,24 @@ export default function ChessbotPvp({ moves, mySide, names, onMove, disabled }: 
   return (
     <div className="flex flex-col gap-2">
       {label(top)}
-      <CapturedTray pos={game.pos} colour={colour(bottom) as 1 | -1} />
-      <ChessBoard pos={game.pos} canMove={myTurn} flipped={flipped} lastMove={game.lastMove} onMove={move} />
-      <CapturedTray pos={game.pos} colour={colour(top) as 1 | -1} />
+      <div className={`mx-auto flex w-full flex-col gap-2 ${fullscreen ? "max-w-[calc(100dvh-16rem)]" : ""}`}>
+        <CapturedTray pos={game.pos} colour={colour(bottom) as 1 | -1} />
+        <ChessBoard
+          pos={game.pos}
+          canMove={myTurn}
+          flipped={flipped}
+          lastMove={game.lastMove}
+          onMove={move}
+          you={mySide === null ? null : (colour(mySide) as 1 | -1)}
+        />
+        <CapturedTray pos={game.pos} colour={colour(top) as 1 | -1} />
+      </div>
       {label(bottom)}
-      <p className={`rounded-xl bg-white/5 px-3 py-2 text-center text-sm ${check && !state.over ? "text-amber-300" : "text-white/80"}`}>
+      <p
+        className={`rounded-xl px-3 py-2 text-center text-sm ${
+          check && !state.over ? "bg-gradient-to-r from-rose-500/25 to-amber-500/25 font-semibold text-amber-200" : "bg-white/5 text-white/80"
+        }`}
+      >
         {statusText}
       </p>
       {mySide !== null && <p className="hidden text-center text-xs text-white/40 sm:block">{KEYBOARD_HINT}</p>}

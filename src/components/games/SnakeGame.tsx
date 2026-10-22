@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { encodeInput, newGame, scoreFor, SIZE, stageConfig, step, turn, type Dir, type SnakeState, type Turn } from "@/lib/games/arcade/snake";
+import { encodeInput, MAX_MS, newGame, scoreFor, stageConfig, step, turn, type Dir, type SnakeState, type Turn } from "@/lib/games/arcade/snake";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
+import { useGameFx, type PopOptions } from "./fx/GameFx";
+import { prefersReducedMotion, useTweened, vibrate } from "./fx/motion";
+import { burst, drawBackground, drawSnake, type SnakeScene } from "./snake/render";
 
 type View = { body: number[]; food: number; eaten: number; alive: boolean };
 
@@ -21,14 +24,30 @@ const KEYS: Record<string, Dir> = {
   D: "R",
 };
 
+/** Two foods eaten within this many ticks of each other make a combo. */
+const COMBO_TICKS = 10;
+
 const snapshot = (s: SnakeState): View => ({ body: s.body.slice(), food: s.food, eaten: s.eaten, alive: s.alive });
+
+/** What the renderer needs between ticks. Written by the game loop, read by the drawing loop; never read back by the game. */
+type Visual = {
+  prev: number[];
+  lastTickAt: number;
+  foodBorn: number;
+  swallow: { cell: number; at: number } | null;
+  crashAt: number | null;
+  particles: SnakeScene["particles"];
+};
 
 export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps) {
   const { tickMs, target } = stageConfig(stage);
-  const [walls] = useState(() => newGame(seed, stage).walls);
-  const [view, setView] = useState<View>(() => snapshot(newGame(seed, stage)));
+  const [preview] = useState(() => newGame(seed, stage));
+  const walls = preview.walls;
+  const [view, setView] = useState<View>(() => snapshot(preview));
   const [started, setStarted] = useState(false);
   const [over, setOver] = useState(false);
+  const fx = useGameFx();
+  const shownScore = useTweened(scoreFor(view.eaten, stage), 350);
 
   // The live game runs in refs; `view` is a copy for drawing.
   const game = useRef<SnakeState | null>(null);
@@ -41,6 +60,25 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
     finishRef.current = onFinish;
   });
   const touch = useRef<{ x: number; y: number } | null>(null);
+
+  const visual = useRef<Visual>({ prev: preview.body.slice(), lastTickAt: 0, foodBorn: 0, swallow: null, crashAt: null, particles: [] });
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Popups: at most one a second, except the ones that must be seen.
+  const fxRef = useRef(fx);
+  useEffect(() => {
+    fxRef.current = fx;
+  });
+  const lastPop = useRef(0);
+  const say = (text: string, opts: PopOptions, force = false) => {
+    const now = performance.now();
+    if (!force && now - lastPop.current < 1000) return;
+    lastPop.current = now;
+    fxRef.current.pop(text, opts);
+  };
+  const combo = useRef({ lastTick: -999, count: 1 });
+  const warned = useRef({ minute: false, ten: false });
 
   function finish() {
     if (finished.current) return;
@@ -58,7 +96,29 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
     if (queue.current.length < 3) queue.current.push(dir);
   }
 
+  /** Feedback for food eaten on tick `t` (visual only). */
+  function ate(s: SnakeState, cell: number, t: number, at: number) {
+    const v = visual.current;
+    v.swallow = { cell, at };
+    // The head reaches the food over the next tick: sparks then, and the new food grows in a little later.
+    v.foodBorn = at + tickMs * 0.6;
+    if (!prefersReducedMotion()) v.particles.push(...burst(cell, at, tickMs * 0.8));
+    vibrate(10);
+    const c = combo.current;
+    c.count = t - c.lastTick <= COMBO_TICKS ? c.count + 1 : 1;
+    c.lastTick = t;
+    if (s.eaten === target) {
+      say("Target reached!", { tone: "great", emoji: "🏆", sub: "Keep going or press Finish" }, true);
+      fxRef.current.confetti(25);
+    } else if (s.eaten === Math.ceil(target / 2)) {
+      say("Halfway there", { tone: "info", emoji: "🐍", sub: `${s.eaten}/${target} eaten` });
+    } else if (c.count >= 2) {
+      say(`Combo x${c.count}`, { tone: c.count >= 3 ? "great" : "good", emoji: "🔥" });
+    }
+  }
+
   // Fixed-step loop: never runs ahead of real time, and skips (rather than races) after the tab was hidden.
+  // The rendering only records what happened here; it never changes when or how ticks run.
   useEffect(() => {
     if (!started) return;
     let raf = 0;
@@ -80,23 +140,100 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
             break;
           }
         }
+        const before = s.body.slice();
+        const eaten = s.eaten;
+        const food = s.food;
         step(s);
+        visual.current.prev = before;
+        if (s.eaten > eaten) ate(s, food, t, now - acc);
       }
       if (acc > tickMs) acc = tickMs;
-      if (steps) setView(snapshot(s));
+      if (steps) {
+        visual.current.lastTickAt = now - acc;
+        setView(snapshot(s));
+        const played = ticks.current * tickMs;
+        if (!warned.current.minute && played >= MAX_MS - 60_000) {
+          warned.current.minute = true;
+          say("1 minute left", { tone: "warn", emoji: "⏳" }, true);
+        }
+        if (!warned.current.ten && played >= MAX_MS - 10_000) {
+          warned.current.ten = true;
+          say("Last 10 seconds", { tone: "bad", emoji: "⏰" }, true);
+        }
+      }
       if (finished.current) return;
       if (!s.alive) {
         // Crashed: the game ends on this tick.
         finished.current = true;
         setOver(true);
         finishRef.current(encodeInput(turns.current, ticks.current));
+        visual.current.crashAt = now;
+        fxRef.current.shake();
+        vibrate([30, 40, 30]);
         return;
       }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ate` only reads refs
   }, [started, tickMs]);
+
+  // Drawing loop: sizes the canvas from its box and draws every frame, gliding between ticks.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const box = boxRef.current;
+    if (!canvas || !box) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let px = 0;
+    let dpr = 1;
+    let bg: HTMLCanvasElement | null = null;
+    const resize = () => {
+      px = box.clientWidth;
+      dpr = Math.min(window.devicePixelRatio || 1, 3);
+      canvas.width = Math.max(1, Math.round(px * dpr));
+      canvas.height = canvas.width;
+      bg = px > 0 ? drawBackground(px, dpr, walls) : null;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(box);
+    const calm = prefersReducedMotion();
+    let raf = 0;
+    let last = performance.now();
+    const draw = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const s = game.current ?? preview;
+      const v = visual.current;
+      const alpha = game.current ? Math.min(1, Math.max(0, (now - v.lastTickAt) / tickMs)) : 1;
+      const scene: SnakeScene = {
+        wrap: s.wrap,
+        prev: v.prev,
+        body: s.body,
+        alpha: calm ? 1 : alpha,
+        dir: s.dir,
+        alive: s.alive,
+        food: s.food,
+        foodBorn: v.foodBorn,
+        swallow: v.swallow,
+        crashAt: v.crashAt,
+        particles: v.particles,
+        now,
+        tickMs,
+        calm,
+      };
+      if (px > 0) drawSnake(ctx, bg, scene, px, dpr, dt);
+      v.particles = scene.particles;
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [preview, walls, tickMs]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -121,55 +258,50 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
     touch.current = { x: p.clientX, y: p.clientY };
   }
 
-  const cells = new Uint8Array(SIZE * SIZE); // 0 empty, 1 wall, 2 body, 3 head, 4 food
-  for (let i = 0; i < cells.length; i++) if (walls[i]) cells[i] = 1;
-  view.body.forEach((b, i) => (cells[b] = i === 0 ? 3 : 2));
-  if (view.food >= 0) cells[view.food] = 4;
   const reached = view.eaten >= target;
+  const progress = Math.min(1, view.eaten / target);
 
   return (
     <div className="flex flex-col gap-3 select-none">
-      <div className="flex items-center justify-between text-sm text-white/70">
-        <span>
-          🍎 {view.eaten}/{target} · {scoreFor(view.eaten, stage)} pts
-        </span>
-        <button
-          type="button"
-          className={reached ? "rounded-full bg-emerald-500 px-3 py-1 font-semibold text-emerald-950" : "underline"}
-          onClick={finish}
-          disabled={over}
-        >
-          {reached ? "Finish" : "Give up"}
-        </button>
+      <style>{`@keyframes snake-bump { 0% { transform: scale(1) } 40% { transform: scale(1.35) } 100% { transform: scale(1) } }`}</style>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between text-sm text-white/70">
+          <span>
+            🍎{" "}
+            <span key={view.eaten} className="inline-block font-semibold text-rose-300" style={{ animation: view.eaten ? "snake-bump .3s ease-out" : undefined }}>
+              {view.eaten}
+            </span>
+            /{target} · <span className="font-semibold text-amber-200">{Math.round(shownScore)}</span> pts
+          </span>
+          <button
+            type="button"
+            className={reached ? "rounded-full bg-emerald-500 px-3 py-1 font-semibold text-emerald-950" : "underline"}
+            onClick={finish}
+            disabled={over}
+          >
+            {reached ? "Finish" : "Give up"}
+          </button>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-500 transition-[width] duration-300 ease-out"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
       </div>
 
       <div
-        className="relative aspect-square rounded-2xl border border-white/10 bg-black/30 p-1"
-        style={{ touchAction: "none" }}
+        className="relative mx-auto aspect-square w-full overflow-hidden rounded-2xl border border-indigo-300/20 shadow-[0_0_30px_rgba(99,102,241,0.18)]"
+        style={{ touchAction: "none", maxWidth: fx.fullscreen ? "calc(100dvh - 17rem)" : undefined }}
         onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
         onTouchMove={onTouchMove}
         onTouchEnd={() => (touch.current = null)}
       >
-        <div className="grid h-full w-full gap-px" style={{ gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gridTemplateRows: `repeat(${SIZE}, 1fr)` }}>
-          {Array.from(cells, (c, i) => (
-            <div
-              key={i}
-              className={
-                c === 1
-                  ? "rounded-sm bg-white/25"
-                  : c === 2
-                    ? "rounded-sm bg-emerald-500"
-                    : c === 3
-                      ? "rounded-sm bg-emerald-300"
-                      : c === 4
-                        ? "scale-75 rounded-full bg-amber-400"
-                        : "rounded-sm bg-white/[0.03]"
-              }
-            />
-          ))}
+        <div ref={boxRef} className="absolute inset-0">
+          <canvas ref={canvasRef} className="block h-full w-full" aria-label="Snake board" role="img" />
         </div>
         {!started && !over && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50 p-6 text-center text-white/80">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/45 p-6 text-center text-white/85">
             Swipe, tap an arrow or press an arrow key to start
           </div>
         )}
@@ -177,7 +309,7 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
           <div className="absolute inset-x-0 top-1/3 text-center text-2xl font-bold text-white drop-shadow">Crashed!</div>
         )}
         {reached && !over && view.alive && (
-          <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold text-emerald-300">
+          <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold text-emerald-300 drop-shadow">
             Target reached! Keep going or press Finish
           </div>
         )}
@@ -198,7 +330,7 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
               e.preventDefault();
               press(dir);
             }}
-            className={`${pos} h-14 w-14 rounded-xl border border-white/10 bg-white/5 text-2xl text-white/80 active:bg-emerald-500/30`}
+            className={`${pos} h-14 w-14 rounded-xl border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] text-2xl text-white/80 transition-transform active:scale-90 active:bg-emerald-500/30`}
           >
             {label}
           </button>

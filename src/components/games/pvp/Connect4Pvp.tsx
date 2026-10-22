@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { canPlay, pvpStateOf, replayConnect4 } from "@/lib/games/arcade/connect4";
 import type { PvpBoardProps } from "@/lib/games/arcade/types";
-import { Connect4Board, viewOf } from "../connect4/Connect4Board";
+import { Connect4Board, DiscFace, useConnect4Moments, viewOf } from "../connect4/Connect4Board";
 
 /** Two-player Connect Four. Side 0 (green) drops first, side 1 is amber. */
 export default function Connect4Pvp({ seed, moves, mySide, names, onMove, disabled }: PvpBoardProps) {
@@ -15,6 +15,7 @@ export default function Connect4Pvp({ seed, moves, mySide, names, onMove, disabl
   );
   const game = useMemo(() => replayConnect4(seed, shown) ?? replayConnect4(seed, moves), [seed, shown, moves]);
   const view = useMemo(() => game && viewOf(game), [game]);
+  useConnect4Moments(view, mySide === null ? null : mySide === 0 ? 1 : 2);
 
   if (!game || !view) return <div className="rounded-2xl bg-black/30 p-6 text-center text-white/70">This game could not be loaded.</div>;
 
@@ -43,9 +44,17 @@ export default function Connect4Pvp({ seed, moves, mySide, names, onMove, disabl
         {([0, 1] as const).map((side) => (
           <div
             key={side}
-            className={`flex items-center gap-2 truncate rounded-xl px-3 py-1.5 ${!state.over && state.turn === side ? "bg-white/10 text-white" : "text-white/60"}`}
+            className={`flex items-center gap-2 truncate rounded-xl px-3 py-1.5 transition-colors duration-300 ${
+              !state.over && state.turn === side
+                ? side === 0
+                  ? "bg-emerald-400/15 text-white ring-1 ring-emerald-300/40"
+                  : "bg-amber-400/15 text-white ring-1 ring-amber-300/40"
+                : "text-white/60"
+            }`}
           >
-            <span className={`inline-block h-3 w-3 shrink-0 rounded-full ${side === 0 ? "bg-emerald-400" : "bg-amber-400"}`} />
+            <span className="relative inline-block h-4 w-4 shrink-0">
+              <DiscFace v={side === 0 ? 1 : 2} full />
+            </span>
             <span className="truncate">{name(side)}</span>
           </div>
         ))}

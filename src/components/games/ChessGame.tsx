@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { computerMove, gameStatus, inCheck, play, startPosition, toUci } from "@/lib/games/arcade/chessbot";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
 import { CapturedTray, ChessBoard, KEYBOARD_HINT } from "./chessbot/ChessBoard";
+import { useGameFx } from "./fx/GameFx";
 
 export default function ChessGame({ seed, stage, onFinish }: GameComponentProps) {
   const [pos, setPos] = useState(startPosition);
@@ -11,18 +12,19 @@ export default function ChessGame({ seed, stage, onFinish }: GameComponentProps)
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [resigned, setResigned] = useState(false);
   const finished = useRef(false);
+  const { fullscreen } = useGameFx();
 
   const status = useMemo(() => gameStatus(pos), [pos]);
   const yourTurn = !status.over && !resigned && pos.side === 1;
 
-  // The computer replies after a short pause.
+  // The computer replies after a short "thinking" pause, once the player's piece has landed.
   useEffect(() => {
     if (status.over || resigned || pos.side !== -1) return;
     const timer = setTimeout(() => {
       const m = computerMove(pos, seed, stage);
       setPos(play(pos, m));
       setLastMove(m);
-    }, 300);
+    }, 650);
     return () => clearTimeout(timer);
   }, [pos, status.over, resigned, seed, stage]);
 
@@ -66,10 +68,20 @@ export default function ChessGame({ seed, stage, onFinish }: GameComponentProps)
           Resign
         </button>
       </div>
-      <CapturedTray pos={pos} colour={1} />
-      <ChessBoard pos={pos} canMove={yourTurn} lastMove={lastMove} onMove={move} />
-      <CapturedTray pos={pos} colour={-1} />
-      <p className={`rounded-xl bg-white/5 px-3 py-2 text-center text-sm ${check && !status.over ? "text-amber-300" : "text-white/80"}`}>
+      <div className={`mx-auto flex w-full flex-col gap-2 ${fullscreen ? "max-w-[calc(100dvh-13rem)]" : ""}`}>
+        <CapturedTray pos={pos} colour={1} />
+        <ChessBoard pos={pos} canMove={yourTurn} lastMove={lastMove} onMove={move} you={1} />
+        <CapturedTray pos={pos} colour={-1} />
+      </div>
+      <p
+        className={`rounded-xl px-3 py-2 text-center text-sm ${
+          check && !status.over
+            ? "bg-gradient-to-r from-rose-500/25 to-amber-500/25 font-semibold text-amber-200"
+            : yourTurn
+              ? "bg-gradient-to-r from-emerald-500/15 to-sky-500/15 text-emerald-100"
+              : "bg-white/5 text-white/80"
+        } ${!yourTurn && !status.over && !resigned ? "animate-pulse" : ""}`}
+      >
         {statusText}
       </p>
       <p className="hidden text-center text-xs text-white/40 sm:block">{KEYBOARD_HINT}</p>

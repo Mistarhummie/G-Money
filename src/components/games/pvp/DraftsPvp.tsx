@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { notation, pathOf, pvpStateOf, replayDrafts, type Move } from "@/lib/games/arcade/drafts";
 import type { PvpBoardProps } from "@/lib/games/arcade/types";
 import { DraftsBoard, SideDot } from "../drafts/DraftsBoard";
+import { useGameFx } from "../fx/GameFx";
 
 const NO_MOVES: Move[] = [];
 
@@ -16,6 +17,7 @@ export default function DraftsPvp({ seed, moves, mySide, names, onMove, disabled
     [moves, pending, disabled],
   );
   const game = useMemo(() => replayDrafts(seed, shown) ?? replayDrafts(seed, moves), [seed, shown, moves]);
+  const { fullscreen } = useGameFx();
 
   if (!game) return <div className="rounded-2xl bg-black/30 p-6 text-center text-white/70">This game could not be loaded.</div>;
 
@@ -61,7 +63,17 @@ export default function DraftsPvp({ seed, moves, mySide, names, onMove, disabled
   return (
     <div className="flex flex-col gap-2">
       {nameRow(top)}
-      <DraftsBoard board={Array.from(game.board)} moves={legal} last={last} flipped={mySide === 1} onMove={send} />
+      <div className={`mx-auto w-full ${fullscreen ? "max-w-[calc(100dvh-13rem)]" : ""}`}>
+        <DraftsBoard
+          board={Array.from(game.board)}
+          moves={legal}
+          last={last}
+          ply={game.plies}
+          flipped={mySide === 1}
+          you={mySide === null ? null : mySide === 0 ? 1 : -1}
+          onMove={send}
+        />
+      </div>
       {nameRow(bottom)}
       <p className={`text-center text-sm ${state.over ? "font-semibold text-emerald-200" : mustCapture && myTurn ? "font-semibold text-emerald-300" : "text-white/70"}`}>
         {status}

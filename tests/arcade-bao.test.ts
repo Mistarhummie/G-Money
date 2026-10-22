@@ -15,6 +15,7 @@ import {
   type Move,
 } from "@/lib/games/arcade/bao";
 import { mulberry32 } from "@/lib/games/arcade/rng";
+import { schedule, traceMove } from "@/components/games/bao/sowing";
 
 /** The board seen from the computer's side, so the computer's own search can play for the player. */
 const flip = (b: Board) => {
@@ -172,6 +173,38 @@ describe("bao", () => {
         worst = Math.max(worst, performance.now() - t);
       }
       expect(worst).toBeLessThan(200);
+    });
+  });
+
+  describe("sowing animation trace", () => {
+    it("ends on exactly the board applyMove gives, step by step", () => {
+      let captures = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        const rand = mulberry32(seed);
+        let board = startBoard();
+        let side: 0 | 1 = 0;
+        for (let ply = 0; ply < 120; ply++) {
+          const legal = legalMoves(board, side);
+          if (!legal.length) break;
+          const m = legal[Math.floor(rand() * legal.length)];
+          const trace = traceMove(board, side, m);
+          const next = applyMove(board, side, m);
+          expect(Array.from(trace.final)).toEqual(Array.from(next));
+          expect(Array.from(trace.steps[trace.steps.length - 1].board)).toEqual(Array.from(next));
+          // Seeds are never created or lost along the way.
+          for (const step of trace.steps) {
+            const inHand = step.hand;
+            expect(seedsOf(step.board, 0) + seedsOf(step.board, 1) + inHand).toBe(64);
+          }
+          const { at, land, total } = schedule(trace);
+          expect(at.length).toBe(trace.steps.length);
+          expect(land.every((t, i) => t >= at[i] && t <= total)).toBe(true);
+          captures += trace.captures;
+          board = next;
+          side = (1 - side) as 0 | 1;
+        }
+      }
+      expect(captures).toBeGreaterThan(0);
     });
   });
 });
