@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { acceptChallengeAction, cancelChallengeAction, playMoveAction, resignAction } from "@/app/actions";
+import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { PVP_COMPONENTS } from "@/components/games/pvp/registry";
 import type { ChallengeView } from "@/lib/challenges";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
@@ -141,14 +142,24 @@ export function MatchClient({ initial, game, stages, ranking, scoreLabel, kind }
           )}
 
           {view.kind === "turns" && Board && (
-            <Board
-              seed={view.seed}
-              moves={view.moves}
-              mySide={view.mySide}
-              names={view.names}
-              onMove={move}
-              disabled={sending || !myTurn}
-            />
+            <GameFrame
+              toolbar={
+                <span className={myTurn ? "text-sm font-semibold text-emerald-300" : "text-sm text-white/60"}>
+                  {view.status === "active" ? (myTurn ? "Your move" : `${view.names[view.turn]} to move`) : "Game over"}
+                  {clock && view.status === "active" && <span className="ml-2 font-mono text-white/80">⏱ {clock}</span>}
+                </span>
+              }
+            >
+              <MatchFx view={view} />
+              <Board
+                seed={view.seed}
+                moves={view.moves}
+                mySide={view.mySide}
+                names={view.names}
+                onMove={move}
+                disabled={sending || !myTurn}
+              />
+            </GameFrame>
           )}
 
           {view.kind === "race" && (
@@ -225,4 +236,27 @@ function RaceSummary({ view, ranking, scoreLabel }: { view: ChallengeView; ranki
       ))}
     </div>
   );
+}
+
+/** Turn and result popups for a two-player board. */
+function MatchFx({ view }: { view: ChallengeView }) {
+  const fx = useGameFx();
+  const myTurn = view.status === "active" && view.mySide === view.turn;
+  const seenMoves = useRef(view.moves.length);
+  const seenStatus = useRef(view.status);
+  useEffect(() => {
+    if (view.moves.length > seenMoves.current && myTurn) fx.pop("Your move", { tone: "info", emoji: "👉", ms: 1000 });
+    seenMoves.current = view.moves.length;
+  }, [view.moves.length, myTurn]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (seenStatus.current !== "finished" && view.status === "finished") {
+      if (view.mySide !== null && view.winnerSide === view.mySide) {
+        fx.confetti(120);
+        fx.pop("You won!", { tone: "great", emoji: "🏆", sub: view.result ?? undefined, ms: 2500 });
+      } else if (view.winnerSide === null) fx.pop("Draw", { tone: "info", emoji: "🤝", sub: view.result ?? undefined, ms: 2500 });
+      else fx.pop(`${view.names[view.winnerSide]} wins`, { tone: "warn", sub: view.result ?? undefined, ms: 2500 });
+    }
+    seenStatus.current = view.status;
+  }, [view.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }

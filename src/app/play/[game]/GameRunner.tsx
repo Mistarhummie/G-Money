@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { startGameAction, submitGameAction } from "@/app/actions";
+import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { GAME_COMPONENTS } from "@/components/games/registry";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
 
@@ -91,22 +92,29 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
         <strong>Stage {stage}:</strong> {current?.goal}
       </p>
 
-      {session && (
-        <div className="flex justify-between font-mono text-sm text-white/80">
-          <span>⏱ {elapsed}s</span>
-          {pending && !result && <span>Checking…</span>}
-        </div>
-      )}
-
-      {session ? (
-        <div className={result ? "pointer-events-none opacity-60" : ""}>
-          <Game key={session.id} seed={session.seed} stage={session.stage} onFinish={finish} />
-        </div>
-      ) : (
-        <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-white/15 text-white/50">
-          Press start to play
-        </div>
-      )}
+      <GameFrame
+        toolbar={
+          session ? (
+            <div className="flex justify-between font-mono text-sm text-white/80">
+              <span>⏱ {elapsed}s</span>
+              {pending && !result && <span>Checking…</span>}
+            </div>
+          ) : (
+            <span className="text-sm text-white/50">Stage {stage}</span>
+          )
+        }
+      >
+        <ResultFx result={result} kind={kind} sessionId={session?.id ?? null} stage={stage} />
+        {session ? (
+          <div className={result ? "pointer-events-none opacity-60" : ""}>
+            <Game key={session.id} seed={session.seed} stage={session.stage} onFinish={finish} />
+          </div>
+        ) : (
+          <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-white/15 bg-gradient-to-br from-emerald-500/10 via-sky-500/5 to-fuchsia-500/10 text-white/60">
+            Press start to play
+          </div>
+        )}
+      </GameFrame>
 
       {result && (
         <div
@@ -139,4 +147,22 @@ export function GameRunner({ game, stages, unlocked, ranking, scoreLabel, kind, 
       )}
     </div>
   );
+}
+
+/** Celebrates or commiserates once a game's result comes back. */
+function ResultFx({ result, kind, sessionId, stage }: { result: Result | null; kind: "solo" | "versus"; sessionId: string | null; stage: number }) {
+  const fx = useGameFx();
+  useEffect(() => {
+    if (sessionId) fx.pop("Go!", { tone: "good", emoji: "🚀", sub: `Stage ${stage}`, ms: 1000 });
+  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!result) return;
+    if (!result.valid) fx.pop("Didn't count", { tone: "bad", emoji: "⚠️", sub: result.detail });
+    else if (result.cleared) {
+      fx.confetti(result.unlockedStage ? 120 : 70);
+      fx.pop(kind === "versus" ? "You won!" : "Stage cleared!", { tone: "great", emoji: "🏆", ms: 2200 });
+      if (result.unlockedStage) setTimeout(() => fx.pop(`Stage ${result.unlockedStage} unlocked`, { tone: "info", emoji: "🔓", ms: 2000 }), 700);
+    } else fx.pop(kind === "versus" ? "The computer won" : "So close!", { tone: "warn", emoji: "💪", sub: "Try again" });
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
