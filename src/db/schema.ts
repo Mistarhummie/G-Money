@@ -244,6 +244,9 @@ export const challenges = pgTable(
     winnerSide: integer("winner_side"),
     result: text("result"),
     moveSeconds: integer("move_seconds").notNull().default(120),
+    // Race matches: each player's live progress while they play, keyed by user id. Display only;
+    // the result always comes from replaying their input.
+    progress: jsonb("progress").$type<Record<string, { score: number; detail?: string; at: number }>>().notNull().default({}),
     lastMoveAt: timestamp("last_move_at", { withTimezone: true }),
     createdAt: createdAt(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
