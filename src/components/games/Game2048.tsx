@@ -6,6 +6,7 @@ import type { GameComponentProps } from "@/lib/games/arcade/types";
 import { useGameFx, type PopOptions } from "./fx/GameFx";
 import { prefersReducedMotion, useTweened, vibrate } from "./fx/motion";
 import { slideTiles, tilesFor, tileStyle, type Tile } from "./g2048/tiles";
+import { useReportProgress } from "./useProgress";
 
 const KEYS: Record<string, Dir> = { ArrowUp: "U", ArrowDown: "D", ArrowLeft: "L", ArrowRight: "R", w: "U", s: "D", a: "L", d: "R" };
 
@@ -19,7 +20,7 @@ const SESSION_MS = 30 * 60 * 1000;
 
 type Game = { state: State; moves: string; tiles: Tile[]; gained: number };
 
-export default function Game2048({ seed, stage, onFinish }: GameComponentProps) {
+export default function Game2048({ seed, stage, onFinish, onProgress }: GameComponentProps) {
   const { target } = stageConfig(stage);
   const [game, setGame] = useState<Game>(() => {
     const state = newGame(seed);
@@ -35,6 +36,7 @@ export default function Game2048({ seed, stage, onFinish }: GameComponentProps) 
   const { state, moves } = game;
   const shownScore = useTweened(state.score, 300);
   const best = maxTile(state.board);
+  useReportProgress(onProgress, moves.length > 0, state.score, `best tile ${best}`);
   const reached = best >= target;
   const stuck = !canMove(state.board);
 

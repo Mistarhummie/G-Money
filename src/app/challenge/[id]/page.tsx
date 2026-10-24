@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db";
-import { challengeView, getChallenge } from "@/lib/challenges";
+import { challengeView, getChallenge, heartbeat } from "@/lib/challenges";
 import { ARCADE, isArcadeKey } from "@/lib/games/arcade";
 import { getCurrentUser } from "@/lib/session";
 import { MatchClient } from "./MatchClient";
@@ -14,6 +14,7 @@ export default async function ChallengePage({ params }: { params: Promise<{ id: 
   const c = await getChallenge(db, id);
   if (!c || !isArcadeKey(c.game)) notFound();
   const user = await getCurrentUser();
+  if (user) await heartbeat(db, user, c);
   const view = await challengeView(db, c, user);
   const game = ARCADE[c.game];
 
@@ -21,7 +22,7 @@ export default async function ChallengePage({ params }: { params: Promise<{ id: 
     <div className="mx-auto flex max-w-lg flex-col gap-4">
       <div>
         <Link href={`/play/${game.key}`} className="text-sm text-white/60 hover:text-white">← {game.name}</Link>
-        <h1 className="text-2xl font-bold">{game.name}: player vs player</h1>
+        <h1 className="text-2xl font-bold">{game.name}: {view.quick ? "online match" : "player vs player"}</h1>
         <p className="text-sm text-white/70">
           {view.kind === "turns"
             ? "Take turns on the same board. You have 2 minutes for each move, or you lose."
@@ -30,6 +31,7 @@ export default async function ChallengePage({ params }: { params: Promise<{ id: 
       </div>
       {user ? (
         <MatchClient
+          key={view.id}
           initial={view}
           game={game.key}
           name={game.name}

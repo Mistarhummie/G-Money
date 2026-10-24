@@ -52,6 +52,12 @@ export type GameComponentProps = {
   stage: number;
   /** Called once when the game is over (won, lost or given up), with everything the server needs to replay it. */
   onFinish: (input: string) => void;
+  /**
+   * Live progress while playing (food eaten, lines cleared, score, tiles home, cells filled), higher is
+   * further along. Shown to the other player in a race; display only, never trusted for the result.
+   * Games may call it on every change: the runner throttles what it sends.
+   */
+  onProgress?: (p: { score: number; detail?: string }) => void;
 };
 
 export const invalid = (detail: string): Verdict => ({ valid: false, cleared: false, score: 0, flagged: false, detail });

@@ -22,6 +22,7 @@ import type { GameComponentProps } from "@/lib/games/arcade/types";
 import { clearSparks, drawBlocks, makeSurface, newFx, PALETTE, type BlocksFx, type Surface } from "./blocks/render";
 import { useGameFx, type PopOptions } from "./fx/GameFx";
 import { prefersReducedMotion, useTweened, vibrate } from "./fx/motion";
+import { useReportProgress } from "./useProgress";
 
 type View = { next: number; spawned: number; lines: number; score: number; alive: boolean };
 
@@ -60,7 +61,7 @@ const KEYS: Record<string, Action> = {
 /** The game hands itself in this long before the server's time limit, leaving room for network delays. */
 const END_MS = MAX_MS - 15_000;
 
-export default function BlocksGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function BlocksGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
   const { target } = stageConfig(stage);
   const [preview] = useState(() => newGame(seed, stage));
   const [view, setView] = useState<View>(() => snapshot(preview));
@@ -68,6 +69,7 @@ export default function BlocksGame({ seed, stage, onFinish }: GameComponentProps
   const [over, setOver] = useState(false);
   const fx = useGameFx();
   const shownScore = useTweened(view.score, 400);
+  useReportProgress(onProgress, started, view.score, `${view.lines}/${target} lines`);
 
   // The live game runs in refs; `view` is a copy for drawing.
   const game = useRef<BlocksState | null>(null);

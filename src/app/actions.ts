@@ -220,6 +220,32 @@ export async function createChallengeAction(_: ActionState, form: FormData): Pro
   return result;
 }
 
+/** "Play online": joins someone waiting for this game (and stage) right now, or starts waiting. Opens the match. */
+export async function quickMatchAction(game: string, stage: number): Promise<{ error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) redirect(`/login?next=/play/${encodeURIComponent(game)}`);
+  let id = "";
+  try {
+    id = (await matches.quickMatch(await getDb(), user, { game, stage })).challenge.id;
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+  redirect(`/challenge/${id}`);
+}
+
+/** Live race progress from the player's game, shown to the other player. Display only; dropped when too frequent. */
+export async function reportProgressAction(id: string, score: number, detail?: string): Promise<{ ok: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false };
+  try {
+    return { ok: await matches.reportProgress(await getDb(), user, String(id), { score, detail }) };
+  } catch (err) {
+    if (err instanceof UserError) return { ok: false };
+    throw err;
+  }
+}
+
 export async function acceptChallengeAction(id: string): Promise<{ error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };

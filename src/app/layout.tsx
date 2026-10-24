@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { getDb } from "@/db";
+import { needsMe } from "@/lib/challenges";
 import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "./actions";
 import "./globals.css";
@@ -18,6 +20,8 @@ export const viewport: Viewport = { themeColor: "#07130e" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
+  // Challenges sent to you and matches waiting on your move. Checked on page loads only; never breaks the page.
+  const waiting = user ? await getDb().then((db) => needsMe(db, user)).catch(() => null) : null;
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
@@ -29,6 +33,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/" className="text-white/80 hover:text-white">Shop</Link>
             <Link href="/tournaments" className="text-white/80 hover:text-white">Tournaments</Link>
             <Link href="/play" className="text-white/80 hover:text-white">Games</Link>
+            {waiting?.href && (
+              <Link
+                href={waiting.href}
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-bold text-amber-950 hover:bg-amber-300"
+                title={waiting.count > 1 ? `${waiting.count} matches need you` : undefined}
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-950" />
+                {waiting.label}
+                {waiting.count > 1 && <span className="rounded-full bg-amber-950/80 px-1.5 text-amber-200">{waiting.count}</span>}
+              </Link>
+            )}
             {user && <Link href="/orders" className="text-white/80 hover:text-white">My orders</Link>}
             {user?.isAdmin && <Link href="/admin" className="text-amber-300 hover:text-amber-200">Admin</Link>}
             {user ? (

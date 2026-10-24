@@ -5,6 +5,7 @@ import { useGameFx, type PopOptions } from "@/components/games/fx/GameFx";
 import { vibrate } from "@/components/games/fx/motion";
 import { applyMove, boardFromSeed, isSolved, moveForTile, stageConfig, type Board, type Move } from "@/lib/games/arcade/slide";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
+import { useReportProgress } from "./useProgress";
 
 const SLIDE_MS = 170; // a tile glides into the gap, speeding up then slowing down
 const POP_GAP_MS = 1000;
@@ -22,7 +23,7 @@ const rowDone = (b: Board, size: number, r: number) => Array.from({ length: size
 const colDone = (b: Board, size: number, c: number) =>
   Array.from({ length: size }, (_, r) => r * size + c).every((i) => i === size * size - 1 || b[i] === i + 1);
 
-export default function SlideGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function SlideGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
   const { size, seconds } = stageConfig(stage);
   const fx = useGameFx();
   const start = useMemo(() => boardFromSeed(seed, size), [seed, size]);
@@ -31,6 +32,7 @@ export default function SlideGame({ seed, stage, onFinish }: GameComponentProps)
   const [arrived, setArrived] = useState<{ v: number; id: number } | null>(null); // a tile that just reached home
   const [gaveUp, setGaveUp] = useState(false);
   const done = isSolved(board) || gaveUp;
+  useReportProgress(onProgress, moves.length > 0, homeCount(board), `${homeCount(board)}/${size * size - 1} tiles home`);
   const shown = useRef(new Set<string>()); // popups already shown this game
   const lastPop = useRef(0);
 

@@ -6,6 +6,7 @@ import type { GameComponentProps } from "@/lib/games/arcade/types";
 import { useGameFx, type PopOptions } from "./fx/GameFx";
 import { prefersReducedMotion, useTweened, vibrate } from "./fx/motion";
 import { burst, drawBackground, drawSnake, type SnakeScene } from "./snake/render";
+import { useReportProgress } from "./useProgress";
 
 type View = { body: number[]; food: number; eaten: number; alive: boolean };
 
@@ -43,7 +44,7 @@ type Visual = {
 /** The game hands itself in this long before the server's time limit, leaving room for network delays. */
 const END_MS = MAX_MS - 15_000;
 
-export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function SnakeGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
   const { tickMs, target } = stageConfig(stage);
   const [preview] = useState(() => newGame(seed, stage));
   const walls = preview.walls;
@@ -52,6 +53,7 @@ export default function SnakeGame({ seed, stage, onFinish }: GameComponentProps)
   const [over, setOver] = useState(false);
   const fx = useGameFx();
   const shownScore = useTweened(scoreFor(view.eaten, stage), 350);
+  useReportProgress(onProgress, started, scoreFor(view.eaten, stage), `${view.eaten}/${target} food`);
 
   // The live game runs in refs; `view` is a copy for drawing.
   const game = useRef<SnakeState | null>(null);

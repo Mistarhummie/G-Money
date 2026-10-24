@@ -5,6 +5,7 @@ import { useGameFx } from "@/components/games/fx/GameFx";
 import { vibrate } from "@/components/games/fx/motion";
 import { PEERS, boxOf, colOf, conflicts, formatEntries, isSolvedGrid, puzzleFromSeed, rowOf, type Entry } from "@/lib/games/arcade/sudoku";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
+import { useReportProgress } from "./useProgress";
 
 /** One colour per digit, for your entries and the number pad. */
 const DIGIT = ["", "#7dd3fc", "#6ee7b7", "#fde047", "#fdba74", "#f9a8d4", "#c4b5fd", "#5eead4", "#bef264", "#a5b4fc"];
@@ -28,7 +29,7 @@ const complete = (grid: number[], cells: number[]) => new Set(cells.map((j) => g
 
 type Sweep = { id: number; unit: Unit; delays: Map<number, number> };
 
-export default function SudokuGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function SudokuGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
   const fx = useGameFx();
   const { givens, solution } = useMemo(() => puzzleFromSeed(seed, stage), [seed, stage]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -53,6 +54,8 @@ export default function SudokuGame({ seed, stage, onFinish }: GameComponentProps
   }, [givens, entries]);
   const bad = useMemo(() => conflicts(grid), [grid]);
   const solved = isSolvedGrid(grid, solution);
+  const cellsFilled = grid.filter((d) => d !== 0).length;
+  useReportProgress(onProgress, entries.length > 0, cellsFilled - givens.filter((d) => d !== 0).length, `${cellsFilled}/81 filled`);
 
   function finish(list: Entry[]) {
     if (finished.current) return;

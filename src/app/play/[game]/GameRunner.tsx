@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { startGameAction, submitGameAction } from "@/app/actions";
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { HowToPlay } from "@/components/games/guide/HowToPlay";
 import { GAME_COMPONENTS } from "@/components/games/registry";
-import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
+import type { ArcadeKey, GameComponentProps, Stage } from "@/lib/games/arcade/types";
 
 type Props = {
   game: ArcadeKey;
@@ -22,11 +22,34 @@ type Props = {
   tournament: { id: string; stage: number } | null;
   /** A match round against another player: one go, on the match's stage. */
   challenge?: { id: string; stage: number } | null;
+  /** Live progress from the game while it is played (match rounds). */
+  onProgress?: GameComponentProps["onProgress"];
+  /** Starts the round by itself (after a match's 3-2-1 countdown). */
+  autoStart?: boolean;
+  /** Called once a round has started. */
+  onStarted?: () => void;
+  /** Extra effects that run inside the game frame, e.g. a match's popups. */
+  children?: ReactNode;
 };
 
 type Result = { valid: boolean; cleared: boolean; score: number; timeMs: number; flagged: boolean; detail?: string; unlockedStage?: number };
 
-export function GameRunner({ game, name, pvp, stages, unlocked, ranking, scoreLabel, kind, tournament, challenge = null }: Props) {
+export function GameRunner({
+  game,
+  name,
+  pvp,
+  stages,
+  unlocked,
+  ranking,
+  scoreLabel,
+  kind,
+  tournament,
+  challenge = null,
+  onProgress,
+  autoStart = false,
+  onStarted,
+  children,
+}: Props) {
   const router = useRouter();
   const [stage, setStage] = useState(challenge?.stage ?? tournament?.stage ?? unlocked);
   const [session, setSession] = useState<{ id: string; seed: number; stage: number; startedAt: number } | null>(null);
@@ -52,8 +75,16 @@ export function GameRunner({ game, name, pvp, stages, unlocked, ranking, scoreLa
       setStage(res.stage);
       setSession({ id: res.sessionId, seed: res.seed, stage: res.stage, startedAt: Date.now() });
       setNow(Date.now());
+      onStarted?.();
     });
   }
+
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || session) return;
+    autoStarted.current = true;
+    start(stage);
+  }, [autoStart]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function finish(input: string) {
     if (!session || result) return;
@@ -111,9 +142,10 @@ export function GameRunner({ game, name, pvp, stages, unlocked, ranking, scoreLa
         }
       >
         <ResultFx result={result} kind={kind} sessionId={session?.id ?? null} stage={stage} />
+        {children}
         {session ? (
           <div className={result ? "pointer-events-none opacity-60" : ""}>
-            <Game key={session.id} seed={session.seed} stage={session.stage} onFinish={finish} />
+            <Game key={session.id} seed={session.seed} stage={session.stage} onFinish={finish} onProgress={onProgress} />
           </div>
         ) : (
           <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-white/15 bg-gradient-to-br from-emerald-500/10 via-sky-500/5 to-fuchsia-500/10 text-white/60">

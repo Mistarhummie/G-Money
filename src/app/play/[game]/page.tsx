@@ -5,11 +5,11 @@ import { Card } from "@/components/ui";
 import { getDb } from "@/db";
 import { tournaments } from "@/db/schema";
 import { myProgress, stageBoard, unlockedStages } from "@/lib/arcade";
-import { kindOf, myChallenges, openChallenges } from "@/lib/challenges";
+import { isQuick, kindOf, liveActivity, myChallenges, openChallenges } from "@/lib/challenges";
 import { ARCADE, isArcadeKey } from "@/lib/games/arcade";
 import { getCurrentUser } from "@/lib/session";
 import { GameRunner } from "./GameRunner";
-import { NewChallengeForm } from "./Lobby";
+import { NewChallengeForm, PlayOnline } from "./Lobby";
 
 export default async function PlayGamePage({
   params,
@@ -32,6 +32,7 @@ export default async function PlayGamePage({
   const race = kindOf(game) === "race";
   const open = t ? [] : await openChallenges(db, key, user);
   const mine = user && !t ? await myChallenges(db, user, key) : [];
+  const activity = t ? null : (await liveActivity(db, [key]))[key];
   const statusText: Record<string, string> = { open: "Waiting", active: "In play", finished: "Finished" };
   const fmt = (row: { bestScore: number | null; bestTimeMs: number | null }) =>
     game.ranking === "score"
@@ -52,6 +53,18 @@ export default async function PlayGamePage({
         <p className="text-sm text-white/70">{game.howToPlay}</p>
         {t && <p className="mt-1 text-sm text-amber-200">Tournament attempt: you get {t.attemptsPerPlayer} attempts and your best one counts.</p>}
       </div>
+
+      {activity && (
+        <PlayOnline
+          game={key}
+          stages={game.stages}
+          race={race}
+          signedIn={!!user}
+          waiting={activity.waiting}
+          playing={activity.playing}
+          waitingByStage={activity.waitingByStage}
+        />
+      )}
 
       {user ? (
         <GameRunner
@@ -92,6 +105,7 @@ export default async function PlayGamePage({
                       {creator ?? "Player"}
                       {race && <span className="text-white/50"> · stage {c.stage}</span>}
                       {c.invitedUserId && <span className="text-amber-200"> · for you</span>}
+                      {isQuick(c) && <span className="text-emerald-300"> · looking for a game now</span>}
                     </span>
                     <Link href={`/challenge/${c.id}`} className="text-emerald-300 underline">View</Link>
                   </li>
