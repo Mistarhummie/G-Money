@@ -10,6 +10,8 @@ export const config = {
       .split(",")
       .map((p) => p.trim())
       .filter(Boolean),
+  /** Test sites only: the admin's private 6-digit sign-in code, used instead of a code shown on screen. */
+  adminTestPin: () => (/^\d{6}$/.test(process.env.ADMIN_TEST_PIN ?? "") ? process.env.ADMIN_TEST_PIN! : null),
   sessionSecret: () => {
     const secret = process.env.SESSION_SECRET;
     if (secret && secret.length >= 32) return secret;

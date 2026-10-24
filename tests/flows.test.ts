@@ -50,6 +50,23 @@ beforeEach(async () => {
 });
 
 describe("sign-in", () => {
+  it("never shows the admin's code on a test site: the admin signs in with a private PIN", async () => {
+    process.env.ADMIN_PHONES = "+254796000999";
+    process.env.ADMIN_TEST_PIN = "482913";
+    try {
+      const res = await requestOtp(db, "0796 000 999");
+      expect(res.devCode).toBeUndefined();
+      await expect(verifyOtp(db, "0796000999", "000000")).rejects.toThrow("Wrong code");
+      const admin = await verifyOtp(db, "0796000999", "482913");
+      expect(admin.isAdmin).toBe(true);
+      // Everyone else still sees their code on screen.
+      expect((await requestOtp(db, "0712 000 222")).devCode).toMatch(/^\d{6}$/);
+    } finally {
+      delete process.env.ADMIN_PHONES;
+      delete process.env.ADMIN_TEST_PIN;
+    }
+  });
+
   it("creates an account from a phone code and blocks wrong codes", async () => {
     const { devCode, phone } = await requestOtp(db, "0712 000 111");
     expect(phone).toBe("+254712000111");

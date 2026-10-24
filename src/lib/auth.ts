@@ -15,6 +15,8 @@ function hashCode(phone: string, code: string): string {
   return createHmac("sha256", config.sessionSecret()).update(`${phone}:${code}`).digest("hex");
 }
 
+const isAdminPhone = (phone: string) => config.adminPhones().some((p) => normaliseKenyanPhone(p) === phone);
+
 export type OtpRequestResult = { phone: string; devCode?: string };
 
 export async function requestOtp(db: Db, rawPhone: string, now = new Date()): Promise<OtpRequestResult> {
@@ -28,7 +30,13 @@ export async function requestOtp(db: Db, rawPhone: string, now = new Date()): Pr
     .where(and(eq(otpCodes.phone, phone), gt(otpCodes.createdAt, hourAgo)));
   if (count >= MAX_CODES_PER_HOUR) throw new UserError("Too many codes requested. Try again in an hour.");
 
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  // On test sites codes are shown on screen, so anyone could sign in as the admin. Admin numbers
+  // therefore use a private PIN (ADMIN_TEST_PIN) as their code instead, and it is never shown.
+  const adminPin = config.otpDevMode() && isAdminPhone(phone) ? config.adminTestPin() : null;
+  if (config.otpDevMode() && isAdminPhone(phone) && !adminPin && process.env.NODE_ENV === "production") {
+    throw new UserError("Admin sign-in on the test site needs ADMIN_TEST_PIN to be set");
+  }
+  const code = adminPin ?? String(randomInt(0, 1_000_000)).padStart(6, "0");
   await db.insert(otpCodes).values({
     phone,
     codeHash: hashCode(phone, code),
@@ -36,6 +44,7 @@ export async function requestOtp(db: Db, rawPhone: string, now = new Date()): Pr
     createdAt: now,
   });
 
+  if (adminPin) return { phone };
   if (config.otpDevMode()) return { phone, devCode: code };
   await sendSms(phone, `Your G-Money code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes.`);
   return { phone };
@@ -62,7 +71,7 @@ export async function verifyOtp(db: Db, rawPhone: string, code: string, now = ne
   }
   await db.update(otpCodes).set({ usedAt: now }).where(eq(otpCodes.id, otp.id));
 
-  const isAdmin = config.adminPhones().some((p) => normaliseKenyanPhone(p) === phone);
+  const isAdmin = isAdminPhone(phone);
   const [existing] = await db.select().from(users).where(eq(users.phone, phone));
   if (existing) {
     if (isAdmin && !existing.isAdmin) {
