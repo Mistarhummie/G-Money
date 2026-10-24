@@ -1,0 +1,446 @@
+import {
+  bigint,
+  boolean,
+  customType,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType() {
+    return "bytea";
+  },
+  fromDriver(value) {
+    return Buffer.from(value);
+  },
+});
+
+const id = () =>
+  text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID());
+
+const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+
+export const users = pgTable("users", {
+  id: id(),
+  // E.164 format, e.g. +254712345678. One account per phone number.
+  phone: text("phone").notNull().unique(),
+  username: text("username").unique(),
+  isAdmin: boolean("is_admin").notNull().default(false),
+  bannedAt: timestamp("banned_at", { withTimezone: true }),
+  banReason: text("ban_reason"),
+  lichessUsername: text("lichess_username"),
+  efootballId: text("efootball_id"),
+  eafcId: text("eafc_id"),
+  matchesPlayed: integer("matches_played").notNull().default(0),
+  disputesLost: integer("disputes_lost").notNull().default(0),
+  createdAt: createdAt(),
+});
+
+export const otpCodes = pgTable(
+  "otp_codes",
+  {
+    id: id(),
+    phone: text("phone").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("otp_codes_phone_idx").on(t.phone, t.createdAt)],
+);
+
+import type { ArcadeKey } from "@/lib/games/arcade/types";
+
+/** Outside games (results reported or read from Lichess) plus our own arcade games. */
+export type GameKey = "chess" | "efootball" | "eafc" | ArcadeKey;
+export type TournamentFormat = "bracket" | "leaderboard";
+export type TournamentStatus = "open" | "running" | "completed" | "cancelled";
+export type EntryType = "free" | "paid";
+
+export const tournaments = pgTable("tournaments", {
+  id: id(),
+  title: text("title").notNull(),
+  game: text("game").$type<GameKey>().notNull(),
+  format: text("format").$type<TournamentFormat>().notNull(),
+  entryType: text("entry_type").$type<EntryType>().notNull().default("free"),
+  // Amounts are whole Kenyan shillings.
+  entryFeeKes: integer("entry_fee_kes").notNull().default(0),
+  sponsoredPrizeKes: integer("sponsored_prize_kes").notNull().default(0),
+  platformFeePercent: integer("platform_fee_percent").notNull().default(10),
+  maxPlayers: integer("max_players").notNull(),
+  // Our own games: the stage everyone plays.
+  stage: integer("stage").notNull().default(1),
+  // Leaderboard tournaments: attempts each player gets.
+  attemptsPerPlayer: integer("attempts_per_player").notNull().default(3),
+  status: text("status").$type<TournamentStatus>().notNull().default("open"),
+  rules: text("rules"),
+  // Gift card prize tournaments: the product and face value (in the card's currency, cents) per finishing place.
+  prizeProductId: text("prize_product_id"),
+  prizeFaceValuesCents: jsonb("prize_face_values_cents").$type<number[]>(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+});
+
+export const entries = pgTable(
+  "entries",
+  {
+    id: id(),
+    tournamentId: text("tournament_id")
+      .notNull()
+      .references(() => tournaments.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    seed: integer("seed"),
+    finalRank: integer("final_rank"),
+    prizeKes: integer("prize_kes").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("entries_tournament_user_idx").on(t.tournamentId, t.userId)],
+);
+
+export type MatchStatus = "pending" | "awaiting_confirmation" | "disputed" | "completed";
+
+export const matches = pgTable(
+  "matches",
+  {
+    id: id(),
+    tournamentId: text("tournament_id")
+      .notNull()
+      .references(() => tournaments.id),
+    round: integer("round").notNull(),
+    slot: integer("slot").notNull(),
+    playerAId: text("player_a_id").references(() => users.id),
+    playerBId: text("player_b_id").references(() => users.id),
+    winnerId: text("winner_id").references(() => users.id),
+    status: text("status").$type<MatchStatus>().notNull().default("pending"),
+    scoreA: integer("score_a"),
+    scoreB: integer("score_b"),
+    reportedBy: text("reported_by").references(() => users.id),
+    reportedAt: timestamp("reported_at", { withTimezone: true }),
+    lichessGameId: text("lichess_game_id"),
+    resolvedBy: text("resolved_by"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("matches_slot_idx").on(t.tournamentId, t.round, t.slot)],
+);
+
+export const evidence = pgTable("evidence", {
+  id: id(),
+  matchId: text("match_id")
+    .notNull()
+    .references(() => matches.id),
+  uploadedBy: text("uploaded_by")
+    .notNull()
+    .references(() => users.id),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: createdAt(),
+});
+
+export const disputes = pgTable("disputes", {
+  id: id(),
+  matchId: text("match_id")
+    .notNull()
+    .references(() => matches.id),
+  openedBy: text("opened_by")
+    .notNull()
+    .references(() => users.id),
+  reason: text("reason").notNull(),
+  claimedScoreA: integer("claimed_score_a"),
+  claimedScoreB: integer("claimed_score_b"),
+  resolution: text("resolution"),
+  resolvedBy: text("resolved_by").references(() => users.id),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+/** One play of one of our own games. The seed comes from the server and the result from replaying the input. */
+export const gameSessions = pgTable(
+  "game_sessions",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    stage: integer("stage").notNull(),
+    // Null for practice.
+    tournamentId: text("tournament_id").references(() => tournaments.id),
+    // Set for a head-to-head race between two players.
+    challengeId: text("challenge_id"),
+    seed: bigint("seed", { mode: "number" }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    timeMs: integer("time_ms"),
+    score: integer("score"),
+    valid: boolean("valid").notNull().default(false),
+    cleared: boolean("cleared").notNull().default(false),
+    flagged: boolean("flagged").notNull().default(false),
+    detail: text("detail"),
+  },
+  (t) => [
+    index("game_sessions_tournament_idx").on(t.tournamentId, t.userId),
+    index("game_sessions_board_idx").on(t.game, t.stage, t.cleared),
+  ],
+);
+
+/** Each player's best result per game and stage. Clearing a stage unlocks the next one. */
+export const gameProgress = pgTable(
+  "game_progress",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    stage: integer("stage").notNull(),
+    bestScore: integer("best_score"),
+    bestTimeMs: integer("best_time_ms"),
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.game, t.stage] })],
+);
+
+export type ChallengeKind = "turns" | "race";
+export type ChallengeStatus = "open" | "active" | "finished" | "cancelled";
+
+/**
+ * One player against another in one of our games. "turns" games store the move list and the server
+ * checks every move by replaying it. "race" games give both players the same board; the better result wins.
+ */
+export const challenges = pgTable(
+  "challenges",
+  {
+    id: id(),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    kind: text("kind").$type<ChallengeKind>().notNull(),
+    stage: integer("stage").notNull().default(1),
+    seed: bigint("seed", { mode: "number" }).notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    // Only this player may accept. Null means anyone can.
+    invitedUserId: text("invited_user_id").references(() => users.id),
+    // Side 0 moves first. Sides are drawn at random when the challenge is accepted.
+    side0Id: text("side0_id").references(() => users.id),
+    side1Id: text("side1_id").references(() => users.id),
+    status: text("status").$type<ChallengeStatus>().notNull().default("open"),
+    moves: jsonb("moves").$type<string[]>().notNull().default([]),
+    turn: integer("turn").notNull().default(0),
+    // null = draw (or not finished).
+    winnerSide: integer("winner_side"),
+    result: text("result"),
+    moveSeconds: integer("move_seconds").notNull().default(120),
+    // Race matches: each player's live progress while they play, keyed by user id. Display only;
+    // the result always comes from replaying their input.
+    progress: jsonb("progress").$type<Record<string, { score: number; detail?: string; at: number }>>().notNull().default({}),
+    lastMoveAt: timestamp("last_move_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("challenges_game_status_idx").on(t.game, t.status)],
+);
+
+// ---------------------------------------------------------------- Ludo
+
+export type LudoMode = "computer" | "online";
+export type LudoStatus = "waiting" | "playing" | "finished" | "cancelled";
+/** One seat at a Ludo table. Computer seats have no userId. */
+export type LudoSeat = { userId: string | null; name: string; bot: boolean; level: number; left?: boolean };
+
+/**
+ * A Ludo game, against the computer or online. The server rolls every die and stores the game as a
+ * log of actions (see src/lib/ludo/rules.ts); every request replays the log to check the next action.
+ * Free to play, no stakes, and never part of prize tournaments (dice decide too much).
+ */
+export const ludoGames = pgTable(
+  "ludo_games",
+  {
+    id: id(),
+    mode: text("mode").$type<LudoMode>().notNull(),
+    status: text("status").$type<LudoStatus>().notNull().default("waiting"),
+    // vs computer: the stage (computer strength).
+    stage: integer("stage"),
+    // Seats at the table (2–4). Fixed once the game starts.
+    size: integer("size").notNull(),
+    // Invite-only tables are left out of quick match and the open tables list.
+    isPrivate: boolean("is_private").notNull().default(false),
+    hostId: text("host_id").references(() => users.id),
+    seats: jsonb("seats").$type<LudoSeat[]>().notNull(),
+    invited: jsonb("invited").$type<string[]>().notNull().default([]),
+    first: integer("first").notNull().default(0),
+    log: jsonb("log").$type<string[]>().notNull().default([]),
+    // Turns in a row each seat let run out.
+    missed: jsonb("missed").$type<number[]>().notNull().default([]),
+    places: jsonb("places").$type<number[]>(),
+    turnSeconds: integer("turn_seconds").notNull().default(30),
+    lastActionAt: timestamp("last_action_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("ludo_games_lobby_idx").on(t.mode, t.status, t.isPrivate)],
+);
+
+/** Who sits where. The keys stop anyone being seated twice at one table or two people sharing a seat. */
+export const ludoPlayers = pgTable(
+  "ludo_players",
+  {
+    gameId: text("game_id")
+      .notNull()
+      .references(() => ludoGames.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    seat: integer("seat").notNull(),
+    joinedAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.userId] }),
+    uniqueIndex("ludo_players_seat_idx").on(t.gameId, t.seat),
+    index("ludo_players_user_idx").on(t.userId),
+  ],
+);
+
+/** Each player's record per vs-computer stage. Finishing first clears a stage and unlocks the next. */
+export const ludoProgress = pgTable(
+  "ludo_progress",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    stage: integer("stage").notNull(),
+    played: integer("played").notNull().default(0),
+    wins: integer("wins").notNull().default(0),
+    // Fewest of your own rolls in a win.
+    bestRolls: integer("best_rolls"),
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.stage] })],
+);
+
+// Double-entry ledger. Every money movement writes balanced rows with the same txId.
+// Paid entry is switched off for the pilot, but tournaments already record
+// their prize obligations here so the books are ready when it is switched on.
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: id(),
+    txId: text("tx_id").notNull(),
+    // e.g. "user:<id>", "tournament:<id>", "platform:fees", "sponsor:<tournamentId>", "external:mpesa"
+    account: text("account").notNull(),
+    // Positive = credit to the account, negative = debit. Whole KES.
+    amountKes: integer("amount_kes").notNull(),
+    memo: text("memo").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ledger_account_idx").on(t.account)],
+);
+
+// ---------------------------------------------------------------- shop
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Denomination = {
+  /** Face value in the card's own currency, in cents (e.g. 1000 = $10). */
+  faceCents: number;
+  /** What the supplier charges us, in USD cents. */
+  costUsdCents: number;
+};
+
+export const products = pgTable(
+  "products",
+  {
+    id: id(),
+    supplier: text("supplier").notNull(),
+    supplierProductId: text("supplier_product_id").notNull(),
+    brand: text("brand").notNull(),
+    name: text("name").notNull(),
+    // Region the card works in, e.g. US.
+    countryCode: text("country_code").notNull(),
+    currency: text("currency").notNull(),
+    denominations: jsonb("denominations").$type<Denomination[]>().notNull(),
+    logoUrl: text("logo_url"),
+    redeemInstructions: text("redeem_instructions"),
+    enabled: boolean("enabled").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("products_supplier_idx").on(t.supplier, t.supplierProductId)],
+);
+
+export type OrderStatus =
+  | "pending_payment"
+  | "held" // paid, waiting for admin approval (fraud check)
+  | "paid" // paid, ready to send to the supplier
+  | "fulfilling"
+  | "delivered"
+  | "failed" // supplier refused; needs a refund
+  | "needs_check" // supplier result unknown (e.g. timeout); check before retrying
+  | "cancelled"
+  | "refunded";
+
+export type PaymentMethod = "mpesa" | "card" | "prize";
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    faceCents: integer("face_cents").notNull(),
+    costUsdCents: integer("cost_usd_cents").notNull(),
+    priceKes: integer("price_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    totalKes: integer("total_kes").notNull(),
+    method: text("method").$type<PaymentMethod>().notNull(),
+    status: text("status").$type<OrderStatus>().notNull().default("pending_payment"),
+    paymentRef: text("payment_ref"),
+    paymentReceipt: text("payment_receipt"),
+    payerEmail: text("payer_email"),
+    heldReason: text("held_reason"),
+    failureReason: text("failure_reason"),
+    supplierTxId: text("supplier_tx_id"),
+    codeEncrypted: text("code_encrypted"),
+    pinEncrypted: text("pin_encrypted"),
+    tournamentId: text("tournament_id").references(() => tournaments.id),
+    createdAt: createdAt(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("orders_user_idx").on(t.userId, t.createdAt),
+    index("orders_status_idx").on(t.status),
+    uniqueIndex("orders_payment_ref_idx").on(t.paymentRef),
+  ],
+);
+
+export type User = typeof users.$inferSelect;
+export type Tournament = typeof tournaments.$inferSelect;
+export type Match = typeof matches.$inferSelect;
+export type Dispute = typeof disputes.$inferSelect;
+export type GameSession = typeof gameSessions.$inferSelect;
+export type Challenge = typeof challenges.$inferSelect;
+export type LudoGame = typeof ludoGames.$inferSelect;
+export type Product = typeof products.$inferSelect;
+export type Order = typeof orders.$inferSelect;

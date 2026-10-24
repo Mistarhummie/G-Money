@@ -1,0 +1,10 @@
+{
+  "name": "G-Money",
+  "short_name": "G-Money",
+  "description": "Skill-based gaming tournaments for Kenyan gamers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07130e",
+  "theme_color": "#07130e",
+  "icons": [{ "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }]
+}
