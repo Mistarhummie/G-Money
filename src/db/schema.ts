@@ -254,6 +254,84 @@ export const challenges = pgTable(
   (t) => [index("challenges_game_status_idx").on(t.game, t.status)],
 );
 
+// ---------------------------------------------------------------- Ludo
+
+export type LudoMode = "computer" | "online";
+export type LudoStatus = "waiting" | "playing" | "finished" | "cancelled";
+/** One seat at a Ludo table. Computer seats have no userId. */
+export type LudoSeat = { userId: string | null; name: string; bot: boolean; level: number; left?: boolean };
+
+/**
+ * A Ludo game, against the computer or online. The server rolls every die and stores the game as a
+ * log of actions (see src/lib/ludo/rules.ts); every request replays the log to check the next action.
+ * Free to play, no stakes, and never part of prize tournaments (dice decide too much).
+ */
+export const ludoGames = pgTable(
+  "ludo_games",
+  {
+    id: id(),
+    mode: text("mode").$type<LudoMode>().notNull(),
+    status: text("status").$type<LudoStatus>().notNull().default("waiting"),
+    // vs computer: the stage (computer strength).
+    stage: integer("stage"),
+    // Seats at the table (2–4). Fixed once the game starts.
+    size: integer("size").notNull(),
+    // Invite-only tables are left out of quick match and the open tables list.
+    isPrivate: boolean("is_private").notNull().default(false),
+    hostId: text("host_id").references(() => users.id),
+    seats: jsonb("seats").$type<LudoSeat[]>().notNull(),
+    invited: jsonb("invited").$type<string[]>().notNull().default([]),
+    first: integer("first").notNull().default(0),
+    log: jsonb("log").$type<string[]>().notNull().default([]),
+    // Turns in a row each seat let run out.
+    missed: jsonb("missed").$type<number[]>().notNull().default([]),
+    places: jsonb("places").$type<number[]>(),
+    turnSeconds: integer("turn_seconds").notNull().default(30),
+    lastActionAt: timestamp("last_action_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("ludo_games_lobby_idx").on(t.mode, t.status, t.isPrivate)],
+);
+
+/** Who sits where. The keys stop anyone being seated twice at one table or two people sharing a seat. */
+export const ludoPlayers = pgTable(
+  "ludo_players",
+  {
+    gameId: text("game_id")
+      .notNull()
+      .references(() => ludoGames.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    seat: integer("seat").notNull(),
+    joinedAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.userId] }),
+    uniqueIndex("ludo_players_seat_idx").on(t.gameId, t.seat),
+    index("ludo_players_user_idx").on(t.userId),
+  ],
+);
+
+/** Each player's record per vs-computer stage. Finishing first clears a stage and unlocks the next. */
+export const ludoProgress = pgTable(
+  "ludo_progress",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    stage: integer("stage").notNull(),
+    played: integer("played").notNull().default(0),
+    wins: integer("wins").notNull().default(0),
+    // Fewest of your own rolls in a win.
+    bestRolls: integer("best_rolls"),
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.stage] })],
+);
+
 // Double-entry ledger. Every money movement writes balanced rows with the same txId.
 // Paid entry is switched off for the pilot, but tournaments already record
 // their prize obligations here so the books are ready when it is switched on.
@@ -363,5 +441,6 @@ export type Match = typeof matches.$inferSelect;
 export type Dispute = typeof disputes.$inferSelect;
 export type GameSession = typeof gameSessions.$inferSelect;
 export type Challenge = typeof challenges.$inferSelect;
+export type LudoGame = typeof ludoGames.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;

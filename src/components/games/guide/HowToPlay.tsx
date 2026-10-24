@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
-import { GUIDES } from ".";
+import type { Stage } from "@/lib/games/arcade/types";
+import { GUIDES, type GuideKey } from ".";
 import type { Guide } from "./types";
 
 type Props = {
-  game: ArcadeKey;
+  game: GuideKey;
   name: string;
   stages: Stage[];
-  /** How two-player matches work for this game. */
-  pvp: "turns" | "race";
+  /** How two-player matches work for this game. Ludo has its own online tables. */
+  pvp: "turns" | "race" | "ludo";
   /** Opens by itself the first time this player opens this game. */
   autoOpen?: boolean;
 };
@@ -134,9 +134,11 @@ export function HowToPlay({ game, name, stages, pvp, autoOpen = true }: Props) {
                     <p className="text-white/60">Clear a stage to unlock the next one.</p>
                   </section>
                   <section className="flex flex-col gap-2">
-                    <h3 className="font-semibold text-fuchsia-300">Playing a friend</h3>
+                    <h3 className="font-semibold text-fuchsia-300">{pvp === "ludo" ? "Playing online" : "Playing a friend"}</h3>
                     <p>
-                      {pvp === "turns"
+                      {pvp === "ludo"
+                        ? "Press Play online to sit at a table with 2, 3 or 4 people, or make a table and invite friends by username or with its link. You have 30 seconds to roll and 30 to move; if time runs out the server plays for you, and after 3 missed turns in a row a computer takes your seat. Online games are free, with nothing to win or lose but pride."
+                        : pvp === "turns"
                         ? "Challenge a friend by username, or post an open challenge, from the game page. You take turns on the same board and have 2 minutes for each move; running out of time loses the game. You can resign at any time."
                         : "Challenge a friend by username, or post an open challenge, from the game page. You both get exactly the same board and one try each, within an hour of the match starting. The better result wins."}
                     </p>

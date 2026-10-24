@@ -43,6 +43,13 @@
       "when": 1792874325840,
       "tag": "0005_race_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792874702500,
+      "tag": "0006_ludo",
+      "breakpoints": true
     }
   ]
 }
