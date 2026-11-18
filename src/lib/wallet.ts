@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { ledgerEntries, users, type User } from "@/db/schema";
 import { config } from "./config";
@@ -11,6 +11,7 @@ type Exec = Db | Tx;
 export const walletOf = (userId: string) => `user:${userId}`;
 export const PLATFORM_FEES = "platform:fees";
 const TEST_GRANT = "testfunds:grant";
+const TEST_GRANT_MEMO = "Test funds to play with";
 
 export async function accountBalance(db: Exec, account: string): Promise<number> {
   const [{ total }] = await db
@@ -66,7 +67,27 @@ export async function joinWithUsername(db: Db, raw: string): Promise<User> {
     if (taken.length) throw new UserError("That username is taken. Try another.");
     // Accounts made this way have no phone; this placeholder keeps the column unique and can never match a real number.
     const [user] = await tx.insert(users).values({ phone: `test:${crypto.randomUUID()}`, username }).returning();
-    await postTransfer(tx, TEST_GRANT, walletOf(user.id), config.testFundsKes, "Test funds to play with");
+    await postTransfer(tx, TEST_GRANT, walletOf(user.id), config.testFundsKes, TEST_GRANT_MEMO);
     return user;
+  });
+}
+
+/**
+ * Test sites only: gives an account that signed in another way (a phone number, such as the admin's) the same
+ * test funds as a new username gets. Once per account; safe to call on every page load.
+ */
+export async function ensureTestFunds(db: Db, userId: string): Promise<void> {
+  if (!config.testFunds()) return;
+  const granted = (tx: Exec) =>
+    tx
+      .select({ id: ledgerEntries.id })
+      .from(ledgerEntries)
+      .where(and(eq(ledgerEntries.account, walletOf(userId)), eq(ledgerEntries.memo, TEST_GRANT_MEMO)))
+      .limit(1);
+  if ((await granted(db)).length) return;
+  await db.transaction(async (tx) => {
+    await lockWallets(tx, [userId]);
+    if ((await granted(tx)).length) return;
+    await postTransfer(tx, TEST_GRANT, walletOf(userId), config.testFundsKes, TEST_GRANT_MEMO);
   });
 }

@@ -3,12 +3,13 @@ import { Card, kes } from "@/components/ui";
 import { getDb } from "@/db";
 import { config } from "@/lib/config";
 import { requireUser } from "@/lib/session";
-import { accountBalance, walletHistory, walletOf } from "@/lib/wallet";
+import { accountBalance, ensureTestFunds, walletHistory, walletOf } from "@/lib/wallet";
 import { updateProfileAction } from "../actions";
 
 export default async function ProfilePage() {
   const user = await requireUser();
   const db = await getDb();
+  await ensureTestFunds(db, user.id);
   const owed = await accountBalance(db, walletOf(user.id));
   const testFunds = config.testFunds();
   const history = testFunds ? await walletHistory(db, user.id) : [];

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { getDb } from "@/db";
 import { needsMe } from "@/lib/challenges";
 import { config } from "@/lib/config";
-import { accountBalance, walletOf } from "@/lib/wallet";
+import { accountBalance, ensureTestFunds, walletOf } from "@/lib/wallet";
 import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "./actions";
 import "./globals.css";
@@ -25,7 +25,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Challenges sent to you and matches waiting on your move. Checked on page loads only; never breaks the page.
   const waiting = user ? await getDb().then((db) => needsMe(db, user)).catch(() => null) : null;
   const testFunds = config.testFunds();
-  const balance = user && testFunds ? await getDb().then((db) => accountBalance(db, walletOf(user.id))).catch(() => null) : null;
+  const balance =
+    user && testFunds
+      ? await getDb()
+          .then(async (db) => {
+            // Accounts that signed in with a phone (like the admin's) get their test funds on their first visit.
+            await ensureTestFunds(db, user.id);
+            return accountBalance(db, walletOf(user.id));
+          })
+          .catch(() => null)
+      : null;
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">

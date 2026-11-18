@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPgliteDb, type Db } from "@/db";
 import { users, type User } from "@/db/schema";
 import { acceptChallenge, cancelChallenge, createChallenge, getChallenge, playMove, prizeFor, quickMatch, resign } from "@/lib/challenges";
-import { accountBalance, joinWithUsername, walletHistory, walletOf } from "@/lib/wallet";
+import { accountBalance, ensureTestFunds, joinWithUsername, walletHistory, walletOf } from "@/lib/wallet";
 
 let db: Db;
 const T0 = new Date("2026-11-18T10:00:00Z");
@@ -25,6 +25,20 @@ describe("joining a test site with a username", () => {
     expect(await walletHistory(db, amina.id)).toMatchObject([{ amountKes: 50_000, memo: "Test funds to play with" }]);
     await expect(joinWithUsername(db, "amina_k")).rejects.toThrow("taken");
     await expect(joinWithUsername(db, "a b")).rejects.toThrow("3 to 20");
+  });
+
+  it("gives phone sign-ins (like the admin) the same funds once, and never twice to username players", async () => {
+    const [admin] = await db.insert(users).values({ phone: "+254700000009", username: "boss", isAdmin: true }).returning();
+    await Promise.all([ensureTestFunds(db, admin.id), ensureTestFunds(db, admin.id)]);
+    await ensureTestFunds(db, admin.id);
+    expect(await balance(admin)).toBe(50_000);
+    const p = await joinWithUsername(db, "player1");
+    await ensureTestFunds(db, p.id);
+    expect(await balance(p)).toBe(50_000);
+    delete process.env.TEST_FUNDS;
+    const [real] = await db.insert(users).values({ phone: "+254700000010" }).returning();
+    await ensureTestFunds(db, real.id);
+    expect(await balance(real)).toBe(0);
   });
 
   it("is switched off on the real site", async () => {
