@@ -24,6 +24,7 @@ import { config } from "./config";
 import { UserError } from "./errors";
 import { checkChessGame, fetchLichessGame, parseLichessGameId, type FetchGame } from "./lichess";
 import { computePrizePool, distributePrizes, payoutSplit } from "./payouts";
+import { accountBalance, postTransfer } from "./wallet";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Exec = Db | Tx;
@@ -593,13 +594,7 @@ export async function cancelTournament(db: Db, admin: User, tournamentId: string
 
 // ---------------------------------------------------------------- ledger
 
-export async function accountBalance(db: Exec, account: string): Promise<number> {
-  const [{ total }] = await db
-    .select({ total: sql<number>`coalesce(sum(${ledgerEntries.amountKes}), 0)::int` })
-    .from(ledgerEntries)
-    .where(eq(ledgerEntries.account, account));
-  return total;
-}
+export { accountBalance };
 
 /** Pilot payouts are sent by hand over M-Pesa; this records that a player's prize balance was paid. */
 export async function recordPayout(db: Db, admin: User, userId: string, amountKes: number, reference: string): Promise<void> {
@@ -629,10 +624,3 @@ export async function prizesOwed(db: Db) {
     .having(sql`sum(${ledgerEntries.amountKes}) > 0`);
 }
 
-async function postTransfer(tx: Exec, from: string, to: string, amountKes: number, memo: string) {
-  const txId = crypto.randomUUID();
-  await tx.insert(ledgerEntries).values([
-    { txId, account: from, amountKes: -amountKes, memo },
-    { txId, account: to, amountKes, memo },
-  ]);
-}

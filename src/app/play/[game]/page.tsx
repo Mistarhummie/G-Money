@@ -5,7 +5,8 @@ import { Card } from "@/components/ui";
 import { getDb } from "@/db";
 import { tournaments } from "@/db/schema";
 import { myProgress, stageBoard, unlockedStages } from "@/lib/arcade";
-import { isQuick, kindOf, liveActivity, myChallenges, openChallenges } from "@/lib/challenges";
+import { isQuick, kindOf, liveActivity, myChallenges, openChallenges, STAKE_FEE_PERCENT, STAKES } from "@/lib/challenges";
+import { config } from "@/lib/config";
 import { ARCADE, isArcadeKey } from "@/lib/games/arcade";
 import { getCurrentUser } from "@/lib/session";
 import { GameRunner } from "./GameRunner";
@@ -33,6 +34,7 @@ export default async function PlayGamePage({
   const open = t ? [] : await openChallenges(db, key, user);
   const mine = user && !t ? await myChallenges(db, user, key) : [];
   const activity = t ? null : (await liveActivity(db, [key]))[key];
+  const staking = config.testFunds() ? { stakes: STAKES, feePercent: STAKE_FEE_PERCENT } : null;
   const statusText: Record<string, string> = { open: "Waiting", active: "In play", finished: "Finished" };
   const fmt = (row: { bestScore: number | null; bestTimeMs: number | null }) =>
     game.ranking === "score"
@@ -63,6 +65,7 @@ export default async function PlayGamePage({
           waiting={activity.waiting}
           playing={activity.playing}
           waitingByStage={activity.waitingByStage}
+          staking={staking}
         />
       )}
 
@@ -87,11 +90,11 @@ export default async function PlayGamePage({
           <h2 className="font-semibold">Play a friend</h2>
           <p className="mb-3 text-sm text-white/60">
             {race
-              ? "You both get the same board, one go each. The better result wins. Free to play."
-              : "Take turns on one board, 2 minutes a move. Free to play."}
+              ? `You both get the same board, one go each. The better result wins.${staking ? "" : " Free to play."}`
+              : `Take turns on one board, 2 minutes a move.${staking ? "" : " Free to play."}`}
           </p>
           {user ? (
-            <NewChallengeForm game={key} stages={game.stages} race={race} />
+            <NewChallengeForm game={key} stages={game.stages} race={race} staking={staking} />
           ) : (
             <Link href={`/login?next=/play/${key}`} className="text-sm text-emerald-300 underline">Sign in to challenge someone</Link>
           )}
@@ -104,6 +107,7 @@ export default async function PlayGamePage({
                     <span>
                       {creator ?? "Player"}
                       {race && <span className="text-white/50"> · stage {c.stage}</span>}
+                      {c.stakeKes > 0 && <span className="text-amber-200"> · KES {c.stakeKes.toLocaleString()}</span>}
                       {c.invitedUserId && <span className="text-amber-200"> · for you</span>}
                       {isQuick(c) && <span className="text-emerald-300"> · looking for a game now</span>}
                     </span>
@@ -133,6 +137,7 @@ export default async function PlayGamePage({
                     <li key={c.id} className="flex items-center justify-between">
                       <span>
                         vs {opponent}
+                        {c.stakeKes > 0 && <span className="text-amber-200"> · KES {c.stakeKes.toLocaleString()}</span>}
                         <span className="text-white/50"> · {outcome}</span>
                       </span>
                       <Link href={`/challenge/${c.id}`} className="text-emerald-300 underline">

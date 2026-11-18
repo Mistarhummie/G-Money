@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { getDb } from "@/db";
 import { needsMe } from "@/lib/challenges";
+import { config } from "@/lib/config";
+import { accountBalance, walletOf } from "@/lib/wallet";
 import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "./actions";
 import "./globals.css";
@@ -22,6 +24,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = await getCurrentUser();
   // Challenges sent to you and matches waiting on your move. Checked on page loads only; never breaks the page.
   const waiting = user ? await getDb().then((db) => needsMe(db, user)).catch(() => null) : null;
+  const testFunds = config.testFunds();
+  const balance = user && testFunds ? await getDb().then((db) => accountBalance(db, walletOf(user.id))).catch(() => null) : null;
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
@@ -46,6 +50,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             )}
             {user && <Link href="/orders" className="text-white/80 hover:text-white">My orders</Link>}
             {user?.isAdmin && <Link href="/admin" className="text-amber-300 hover:text-amber-200">Admin</Link>}
+            {balance != null && (
+              <Link
+                href="/profile"
+                className="rounded-full border border-amber-300/40 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-100"
+                title="Test funds: not real money"
+              >
+                KES {balance.toLocaleString()}
+              </Link>
+            )}
             {user ? (
               <>
                 <Link href="/profile" className="text-white/80 hover:text-white">{user.username ?? "Profile"}</Link>
@@ -54,10 +67,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </form>
               </>
             ) : (
-              <Link href="/login" className="btn-primary !py-1.5">Sign in</Link>
+              <Link href="/login" className="btn-primary !py-1.5">{testFunds ? "Join" : "Sign in"}</Link>
             )}
           </nav>
         </header>
+        {testFunds && !user && (
+          <div className="bg-amber-400/15 px-4 py-2 text-center text-sm text-amber-100">
+            Test site: <Link href="/login" className="font-semibold underline">pick a username</Link> and get KES{" "}
+            {config.testFundsKes.toLocaleString()} in test funds to play other people live.
+          </div>
+        )}
         {user?.bannedAt && (
           <div className="bg-red-500/15 px-4 py-2 text-center text-sm text-red-200">
             Your account is suspended: {user.banReason}. Contact support to appeal.

@@ -1,8 +1,18 @@
 /** Feature switches and settings read from environment variables. */
 
+function testFunds() {
+  return process.env.TEST_FUNDS === "true";
+}
+
 export const config = {
   /** Paid entry stays off until a Kenyan gaming lawyer confirms it is allowed. */
-  paidEntryEnabled: () => process.env.PAID_ENTRY_ENABLED === "true",
+  paidEntryEnabled: () => process.env.PAID_ENTRY_ENABLED === "true" || testFunds(),
+  /**
+   * Test sites only: players join with just a username, get TEST_FUNDS_KES of play money, and can stake it
+   * on matches against each other. Play money can't be paid in or out, so nothing here is real betting.
+   */
+  testFunds,
+  testFundsKes: 50_000,
   /** Shows sign-in codes on screen instead of sending an SMS. Never enable in production. */
   otpDevMode: () => process.env.NODE_ENV !== "production" || process.env.OTP_DEV_MODE === "true",
   adminPhones: () =>

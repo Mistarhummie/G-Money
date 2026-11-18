@@ -50,6 +50,13 @@
       "when": 1792874702500,
       "tag": "0006_ludo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794985975929,
+      "tag": "0007_stakes",
+      "breakpoints": true
     }
   ]
 }

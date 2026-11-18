@@ -2,9 +2,11 @@ import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { challenges, gameSessions, users, type Challenge, type GameSession, type User } from "@/db/schema";
+import { config } from "./config";
 import { UserError } from "./errors";
 import { ARCADE, ARCADE_KEYS, isArcadeKey, type ArcadeGame } from "./games/arcade";
 import type { ArcadeKey } from "./games/arcade/types";
+import { accountBalance, lockWallets, PLATFORM_FEES, postTransfer, walletOf } from "./wallet";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Exec = Db | Tx;
@@ -28,6 +30,31 @@ const RACE_LIVE_MS = 15 * 60 * 1000;
 export const PROGRESS_GAP_MS = 800;
 const MAX_PROGRESS_SCORE = 10_000_000;
 
+/** Test sites only: the play-money stakes a match can be for (0 = free). */
+export const STAKES = [0, 100, 500, 1000, 5000] as const;
+/** The platform's share of a staked match's pot, in percent. */
+export const STAKE_FEE_PERCENT = 10;
+
+/** What the winner of a match at this stake receives: both stakes less the fee. */
+export const prizeFor = (stakeKes: number) => {
+  const pot = stakeKes * 2;
+  return pot - Math.floor((pot * STAKE_FEE_PERCENT) / 100);
+};
+
+function parseStake(raw: unknown): number {
+  const stake = Math.trunc(Number(raw ?? 0)) || 0;
+  if (stake === 0) return 0;
+  if (!config.testFunds()) throw new UserError("Matches are free to play");
+  if (!(STAKES as readonly number[]).includes(stake)) throw new UserError("Pick one of the stakes shown");
+  return stake;
+}
+
+async function checkFunds(db: Exec, user: User, stakeKes: number) {
+  if (stakeKes > 0 && (await accountBalance(db, walletOf(user.id))) < stakeKes) {
+    throw new UserError(`You need KES ${stakeKes.toLocaleString()} in test funds for this match`);
+  }
+}
+
 export const kindOf = (game: ArcadeGame) => (game.pvp ? "turns" : "race");
 
 export const isQuick = (c: Pick<Challenge, "progress">) => !!c.progress?.[QUICK_KEY];
@@ -49,7 +76,7 @@ export function sideOf(c: Challenge, userId: string): 0 | 1 | null {
 export async function createChallenge(
   db: Db,
   user: User,
-  input: { game: string; stage?: number; opponent?: string },
+  input: { game: string; stage?: number; opponent?: string; stake?: number },
 ): Promise<Challenge> {
   checkPlayer(user);
   if (!isArcadeKey(input.game)) throw new UserError("Unknown game");
@@ -66,11 +93,13 @@ export async function createChallenge(
     if (other.id === user.id) throw new UserError("You can't challenge yourself");
     invitedUserId = other.id;
   }
+  const stakeKes = parseStake(input.stake);
   await checkOpenLimit(db, user);
+  await checkFunds(db, user, stakeKes);
 
   const [created] = await db
     .insert(challenges)
-    .values({ game: game.key, kind, stage, seed: randomInt(1, 2 ** 31), createdBy: user.id, invitedUserId })
+    .values({ game: game.key, kind, stage, seed: randomInt(1, 2 ** 31), createdBy: user.id, invitedUserId, stakeKes })
     .returning();
   return created;
 }
@@ -93,6 +122,17 @@ async function acceptLocked(tx: Tx, c: Challenge | undefined, user: User, now: D
   if (!c || c.status !== "open") throw new UserError("This challenge is no longer open");
   if (c.createdBy === user.id) throw new UserError("You can't accept your own challenge");
   if (c.invitedUserId && c.invitedUserId !== user.id) throw new UserError("This challenge is for someone else");
+  if (c.stakeKes > 0) {
+    // Both stakes go into the match's own account when it starts; finish() pays them out.
+    await lockWallets(tx, [c.createdBy, user.id]);
+    await checkFunds(tx, user, c.stakeKes);
+    if ((await accountBalance(tx, walletOf(c.createdBy))) < c.stakeKes) {
+      throw new UserError("The other player no longer has enough test funds for this match");
+    }
+    const memo = `Stake: ${ARCADE[c.game].name} match`;
+    await postTransfer(tx, walletOf(c.createdBy), `challenge:${c.id}`, c.stakeKes, memo);
+    await postTransfer(tx, walletOf(user.id), `challenge:${c.id}`, c.stakeKes, memo);
+  }
   // Who moves first is drawn at random.
   const creatorFirst = randomInt(0, 2) === 0;
   const [updated] = await tx
@@ -120,7 +160,7 @@ async function acceptLocked(tx: Tx, c: Challenge | undefined, user: User, now: D
 export async function quickMatch(
   db: Db,
   user: User,
-  input: { game: string; stage?: number },
+  input: { game: string; stage?: number; stake?: number },
   now = new Date(),
 ): Promise<{ challenge: Challenge; matched: boolean }> {
   checkPlayer(user);
@@ -129,11 +169,19 @@ export async function quickMatch(
   const kind = kindOf(game);
   const stage = kind === "race" ? Math.trunc(Number(input.stage ?? 1)) : 1;
   if (!(stage >= 1 && stage <= game.stages.length)) throw new UserError("Unknown stage");
+  const stakeKes = parseStake(input.stake);
+  await checkFunds(db, user, stakeKes);
   const fresh = new Date(now.getTime() - WAITING_STALE_MS);
 
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`quick:${game.key}:${stage}`}))`);
-    const here = and(eq(challenges.game, game.key), eq(challenges.stage, stage), eq(challenges.status, "open"));
+    // Players are only paired with someone playing for the same stake.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`quick:${game.key}:${stage}:${stakeKes}`}))`);
+    const here = and(
+      eq(challenges.game, game.key),
+      eq(challenges.stage, stage),
+      eq(challenges.stakeKes, stakeKes),
+      eq(challenges.status, "open"),
+    );
 
     // Quick matches whose player left stop waiting.
     await tx
@@ -174,6 +222,7 @@ export async function quickMatch(
         stage,
         seed: randomInt(1, 2 ** 31),
         createdBy: user.id,
+        stakeKes,
         progress: { [QUICK_KEY]: { score: 0, at: now.getTime() } },
         lastMoveAt: now,
       })
@@ -335,7 +384,22 @@ async function finish(tx: Exec, c: Challenge, winnerSide: 0 | 1 | null, result: 
     .set({ status: "finished", winnerSide, result, finishedAt: now })
     .where(eq(challenges.id, c.id))
     .returning();
+  if (c.stakeKes > 0 && c.side0Id && c.side1Id) await payOut(tx, c, winnerSide);
   return updated;
+}
+
+/** Empties a staked match's account: the winner gets the prize and the platform its fee; a draw refunds both. */
+async function payOut(tx: Exec, c: Challenge, winnerSide: 0 | 1 | null) {
+  const pot = `challenge:${c.id}`;
+  const game = ARCADE[c.game].name;
+  if (winnerSide === null) {
+    await postTransfer(tx, pot, walletOf(c.side0Id!), c.stakeKes, `Stake back: ${game} draw`);
+    await postTransfer(tx, pot, walletOf(c.side1Id!), c.stakeKes, `Stake back: ${game} draw`);
+    return;
+  }
+  const prize = prizeFor(c.stakeKes);
+  await postTransfer(tx, pot, walletOf((winnerSide === 0 ? c.side0Id : c.side1Id)!), prize, `Won: ${game} match`);
+  await postTransfer(tx, pot, PLATFORM_FEES, c.stakeKes * 2 - prize, `Fee: ${game} match`);
 }
 
 /** Whoever's clock ran out loses. Applied whenever anyone looks at or plays in the match. */
@@ -532,6 +596,9 @@ export type ChallengeView = {
   createdAt: number;
   /** When the match started (both players in), while no move has been made yet. Drives the 3-2-1 countdown. */
   startedAt: number | null;
+  /** Test funds each player puts in (0 = free), and what the winner gets. */
+  stakeKes: number;
+  prizeKes: number;
 };
 
 /** Everything a match page needs, from one player's point of view. Results of a race stay hidden until it ends. */
@@ -589,5 +656,7 @@ export async function challengeView(db: Db, c: Challenge, viewer: User | null, n
     createdAt: c.createdAt.getTime(),
     startedAt:
       c.status === "active" && c.lastMoveAt && (c.kind === "race" || c.moves.length === 0) ? c.lastMoveAt.getTime() : null,
+    stakeKes: c.stakeKes,
+    prizeKes: c.stakeKes > 0 ? prizeFor(c.stakeKes) : 0,
   };
 }

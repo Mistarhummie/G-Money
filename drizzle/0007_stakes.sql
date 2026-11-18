@@ -1,0 +1,1 @@
+ALTER TABLE "challenges" ADD COLUMN "stake_kes" integer DEFAULT 0 NOT NULL;

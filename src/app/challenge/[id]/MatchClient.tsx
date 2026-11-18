@@ -96,7 +96,7 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
   function searchAgain() {
     setError(null);
     startTransition(async () => {
-      const res = await quickMatchAction(game, view.stage);
+      const res = await quickMatchAction(game, view.stage, view.stakeKes);
       if (res?.error) setError(res.error);
     });
   }
@@ -158,8 +158,18 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
   const iCreated = view.canCancel && view.mySide === null && !view.canAccept;
   const showRunner = view.kind === "race" && view.mySide !== null && ((view.status === "active" && !view.iStarted) || inRound);
 
+  const stakeLine =
+    view.stakeKes > 0
+      ? `KES ${view.stakeKes.toLocaleString()} each · winner gets KES ${view.prizeKes.toLocaleString()}`
+      : null;
+
   return (
     <div className="flex flex-col gap-4">
+      {stakeLine && (
+        <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-center text-sm text-amber-100">
+          💰 {view.status === "open" ? "Stake" : "Playing for"}: {stakeLine} <span className="text-amber-200/60">(test funds)</span>
+        </div>
+      )}
       {countdown && countdownLeft != null && <Countdown msLeft={countdownLeft} names={view.names} mySide={view.mySide} />}
 
       {view.status === "open" && view.quick && iCreated && (
@@ -193,7 +203,7 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
           <div className="mt-3 flex gap-2">
             {view.canAccept && (
               <button className="btn-primary flex-1" disabled={pending} onClick={() => act(() => acceptChallengeAction(view.id))}>
-                Accept and play
+                {view.stakeKes > 0 ? `Accept and stake KES ${view.stakeKes.toLocaleString()}` : "Accept and play"}
               </button>
             )}
             {view.canCancel && (
@@ -297,6 +307,15 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
                     ? "You won! 🎉"
                     : `${view.names[view.winnerSide]} won.`}
               {view.result && <span className="text-white/60"> ({view.result})</span>}
+              {view.stakeKes > 0 && view.mySide !== null && (
+                <p className="mt-1 text-sm font-semibold">
+                  {view.winnerSide === null
+                    ? `Your KES ${view.stakeKes.toLocaleString()} stake is back in your wallet.`
+                    : view.winnerSide === view.mySide
+                      ? `+KES ${view.prizeKes.toLocaleString()} added to your wallet.`
+                      : `You lost your KES ${view.stakeKes.toLocaleString()} stake.`}
+                </p>
+              )}
             </div>
           )}
 

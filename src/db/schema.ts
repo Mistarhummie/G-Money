@@ -244,6 +244,9 @@ export const challenges = pgTable(
     winnerSide: integer("winner_side"),
     result: text("result"),
     moveSeconds: integer("move_seconds").notNull().default(120),
+    // Test sites only: play money each player puts in. Taken from both when the match starts; the winner
+    // gets both stakes less the platform fee, a draw gives each their stake back.
+    stakeKes: integer("stake_kes").notNull().default(0),
     // Race matches: each player's live progress while they play, keyed by user id. Display only;
     // the result always comes from replaying their input.
     progress: jsonb("progress").$type<Record<string, { score: number; detail?: string; at: number }>>().notNull().default({}),

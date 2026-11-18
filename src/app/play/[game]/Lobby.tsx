@@ -5,12 +5,65 @@ import { useActionState, useState, useTransition } from "react";
 import { createChallengeAction, quickMatchAction } from "@/app/actions";
 import type { Stage } from "@/lib/games/arcade/types";
 
+/** Test sites only: what each player puts in, and what the winner takes home. Null `stakes` = free play only. */
+export function StakePicker({
+  stakes,
+  value,
+  onChange,
+  feePercent,
+}: {
+  stakes: readonly number[];
+  value: number;
+  onChange: (stake: number) => void;
+  feePercent: number;
+}) {
+  const prize = value * 2 - Math.floor((value * 2 * feePercent) / 100);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Stake">
+        {stakes.map((s) => (
+          <button
+            key={s}
+            type="button"
+            role="radio"
+            aria-checked={value === s}
+            onClick={() => onChange(s)}
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+              value === s ? "border-amber-300 bg-amber-400/25 text-amber-100" : "border-white/15 text-white/80"
+            }`}
+          >
+            {s === 0 ? "Free" : `KES ${s.toLocaleString()}`}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-white/60">
+        {value === 0 ? "Just for fun, no stake." : `You each put in KES ${value.toLocaleString()}. Winner gets KES ${prize.toLocaleString()} of test funds.`}
+      </p>
+    </div>
+  );
+}
+
+type StakeOptions = { stakes: readonly number[]; feePercent: number } | null;
+
 /** Start a match: open to anyone, or sent to one player by username. */
-export function NewChallengeForm({ game, stages, race }: { game: string; stages: Stage[]; race: boolean }) {
+export function NewChallengeForm({
+  game,
+  stages,
+  race,
+  staking = null,
+}: {
+  game: string;
+  stages: Stage[];
+  race: boolean;
+  staking?: StakeOptions;
+}) {
   const [state, action, pending] = useActionState(createChallengeAction, undefined);
+  const [stake, setStake] = useState(0);
   return (
     <form action={action} className="flex flex-col gap-2 text-sm">
       <input type="hidden" name="game" value={game} />
+      <input type="hidden" name="stake" value={stake} />
+      {staking && <StakePicker stakes={staking.stakes} value={stake} onChange={setStake} feePercent={staking.feePercent} />}
       <label className="label">
         Opponent&apos;s username (leave empty for anyone)
         <input name="opponent" className="input" placeholder="e.g. otieno" autoComplete="off" />
@@ -64,6 +117,7 @@ export function PlayOnline({
   waiting,
   playing,
   waitingByStage,
+  staking = null,
 }: {
   game: string;
   stages: Stage[];
@@ -72,7 +126,9 @@ export function PlayOnline({
   waiting: number;
   playing: number;
   waitingByStage: Record<number, number>;
+  staking?: StakeOptions;
 }) {
+  const [stake, setStake] = useState(0);
   const busiest = Object.entries(waitingByStage).sort((a, b) => b[1] - a[1])[0];
   const [stage, setStage] = useState(busiest ? Number(busiest[0]) : 1);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +137,7 @@ export function PlayOnline({
   function go() {
     setError(null);
     startTransition(async () => {
-      const res = await quickMatchAction(game, race ? stage : 1);
+      const res = await quickMatchAction(game, race ? stage : 1, stake);
       if (res?.error) setError(res.error);
     });
   }
@@ -119,9 +175,12 @@ export function PlayOnline({
           })}
         </div>
       )}
+      {staking && <StakePicker stakes={staking.stakes} value={stake} onChange={setStake} feePercent={staking.feePercent} />}
       {signedIn ? (
         <button type="button" onClick={go} disabled={pending} className="btn-primary py-3 text-base font-bold">
-          {pending ? "Finding a player…" : `⚡ Play online${race ? ` · stage ${stage}` : ""}`}
+          {pending
+            ? "Finding a player…"
+            : `⚡ Play online${race ? ` · stage ${stage}` : ""}${stake ? ` · KES ${stake.toLocaleString()}` : ""}`}
         </button>
       ) : (
         <Link href={`/login?next=/play/${game}`} className="btn-primary py-3 text-center text-base font-bold">

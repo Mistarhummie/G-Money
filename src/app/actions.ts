@@ -16,6 +16,7 @@ import { simulatePayment, startPayment, refreshPayment } from "@/lib/shop/checko
 import * as shop from "@/lib/shop/orders";
 import { getSupplier } from "@/lib/shop/suppliers";
 import { orders } from "@/db/schema";
+import { joinWithUsername } from "@/lib/wallet";
 
 export type ActionState = { error?: string; message?: string; devCode?: string; phone?: string } | undefined;
 
@@ -64,6 +65,17 @@ export async function verifyCodeAction(_: ActionState, form: FormData): Promise<
   if (result?.error) return { ...result, phone: str(form, "phone") };
   const next = str(form, "next");
   redirect(/^\/(?![\/\\])/.test(next) ? next : "/profile");
+}
+
+/** Test sites only: join with just a username and get the test funds. */
+export async function joinWithUsernameAction(_: ActionState, form: FormData): Promise<ActionState> {
+  const result = await run(async () => {
+    const user = await joinWithUsername(await getDb(), str(form, "username"));
+    await startSession(user.id);
+  });
+  if (result?.error) return result;
+  const next = str(form, "next");
+  redirect(/^\/(?![\/\\])/.test(next) ? next : "/play");
 }
 
 export async function signOutAction() {
@@ -213,6 +225,7 @@ export async function createChallengeAction(_: ActionState, form: FormData): Pro
       game: str(form, "game"),
       stage: Number(str(form, "stage") || 1),
       opponent: str(form, "opponent"),
+      stake: Number(str(form, "stake") || 0),
     });
     id = c.id;
   });
@@ -221,12 +234,12 @@ export async function createChallengeAction(_: ActionState, form: FormData): Pro
 }
 
 /** "Play online": joins someone waiting for this game (and stage) right now, or starts waiting. Opens the match. */
-export async function quickMatchAction(game: string, stage: number): Promise<{ error?: string }> {
+export async function quickMatchAction(game: string, stage: number, stake = 0): Promise<{ error?: string }> {
   const user = await getCurrentUser();
   if (!user) redirect(`/login?next=/play/${encodeURIComponent(game)}`);
   let id = "";
   try {
-    id = (await matches.quickMatch(await getDb(), user, { game, stage })).challenge.id;
+    id = (await matches.quickMatch(await getDb(), user, { game, stage, stake: Number(stake) || 0 })).challenge.id;
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;

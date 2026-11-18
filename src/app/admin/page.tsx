@@ -45,7 +45,8 @@ export default async function AdminPage() {
     .from(tournaments)
     .where(inArray(tournaments.status, ["open", "running"]))
     .orderBy(tournaments.startsAt);
-  const owed = await prizesOwed(db);
+  // Test funds are play money: nothing is owed to anyone on a test site.
+  const owed = config.testFunds() ? [] : await prizesOwed(db);
   const flagged = await db
     .select({ a: gameSessions, username: users.username })
     .from(gameSessions)
