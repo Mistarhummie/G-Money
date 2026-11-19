@@ -12,8 +12,12 @@ export default async function ShopHome() {
 
   return (
     <div className="flex flex-col gap-8">
-      <section className="rounded-3xl bg-gradient-to-br from-emerald-600/30 to-emerald-900/10 p-6 sm:p-10">
-        <h1 className="text-3xl font-bold sm:text-4xl">Gaming gift cards, paid with M-Pesa.</h1>
+      <section className="hero animate-pop rounded-3xl border border-white/10 p-6 sm:p-10">
+        <div className="hero-hex" aria-hidden />
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-lilac">Gift cards + games</p>
+        <h1 className="mt-2 text-3xl leading-tight sm:text-5xl">
+          Gaming gift cards, <span className="text-gradient">paid with M-Pesa.</span>
+        </h1>
         <p className="mt-3 max-w-xl text-white/80">
           PlayStation, Xbox, Steam, Google Play and more. Pay in shillings and your code shows up here in seconds. It is also kept
           safe in My orders.
@@ -24,8 +28,8 @@ export default async function ShopHome() {
         </div>
       </section>
 
-      <section id="cards">
-        <h2 className="mb-3 text-xl font-semibold">Gift cards</h2>
+      <section id="cards" className="scroll-mt-20">
+        <h2 className="mb-3 text-2xl">Gift cards</h2>
         {items.length === 0 ? (
           <Card>
             The shop opens soon.
@@ -37,19 +41,19 @@ export default async function ShopHome() {
             )}
           </Card>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="reveal grid grid-cols-2 gap-3 sm:grid-cols-3">
             {items.map((p) => {
               const from = Math.min(...p.prices.map((x) => x.priceKes));
               const faces = p.prices.map((x) => formatFace(x.faceCents, p.currency));
               return (
-                <Link key={p.id} href={`/shop/${p.id}`}>
-                  <Card className="flex h-full flex-col gap-2 !p-3 transition hover:border-emerald-400/50">
-                    <BrandTile brand={p.brand} logoUrl={p.logoUrl} />
-                    <h3 className="text-sm font-semibold leading-tight">{p.name}</h3>
+                <Link key={p.id} href={`/shop/${p.id}`} className="rounded-2xl">
+                  <Card className="card-link flex h-full flex-col gap-2 !p-3">
+                    <BrandTile brand={p.brand} logoUrl={p.logoUrl} morphId={p.id} />
+                    <h3 className="text-sm leading-tight">{p.name}</h3>
                     <p className="text-xs text-white/60">
                       {p.countryCode} cards · {faces[0]} to {faces[faces.length - 1]}
                     </p>
-                    <p className="mt-auto text-sm font-medium text-emerald-300">From {kes(from)}</p>
+                    <p className="price-glow mt-auto font-display text-base font-black">From {kes(from)}</p>
                   </Card>
                 </Link>
               );
@@ -58,17 +62,17 @@ export default async function ShopHome() {
         )}
       </section>
 
-      <section className="grid gap-3 text-sm sm:grid-cols-3">
+      <section className="reveal grid gap-3 text-sm sm:grid-cols-3">
         <Card>
-          <h3 className="font-semibold">Instant codes</h3>
+          <h3 className="text-base">Instant codes</h3>
           <p className="mt-1 text-white/70">Most orders are delivered as soon as M-Pesa confirms the payment.</p>
         </Card>
         <Card>
-          <h3 className="font-semibold">Real, licensed cards</h3>
+          <h3 className="text-base">Real, licensed cards</h3>
           <p className="mt-1 text-white/70">Every card comes from an authorised distributor, never from resellers.</p>
         </Card>
         <Card>
-          <h3 className="font-semibold">Check the region</h3>
+          <h3 className="text-base">Check the region</h3>
           <p className="mt-1 text-white/70">Cards only work in their region. US cards need a US account on PlayStation, Xbox or Steam.</p>
         </Card>
       </section>

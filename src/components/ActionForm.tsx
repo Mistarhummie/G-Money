@@ -26,10 +26,17 @@ export function ActionForm({ action, submitLabel, pendingLabel, className, butto
     >
       {children}
       <button type="submit" disabled={pending} className={buttonClassName ?? "btn-primary"}>
-        {pending ? (pendingLabel ?? "Working…") : submitLabel}
+        {pending ? (
+          <>
+            <span className="spinner" aria-hidden />
+            {pendingLabel ?? "Working…"}
+          </>
+        ) : (
+          submitLabel
+        )}
       </button>
-      {state?.error && <p className="text-sm text-red-400">{state.error}</p>}
-      {state?.message && !state.error && <p className="text-sm text-emerald-400">{state.message}</p>}
+      {state?.error && <p className="animate-pop text-sm text-red-400">{state.error}</p>}
+      {state?.message && !state.error && <p className="animate-pop text-sm text-emerald-400">{state.message}</p>}
     </form>
   );
 }

@@ -166,8 +166,8 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
   return (
     <div className="flex flex-col gap-4">
       {stakeLine && (
-        <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-center text-sm text-amber-100">
-          💰 {view.status === "open" ? "Stake" : "Playing for"}: {stakeLine} <span className="text-amber-200/60">(test funds)</span>
+        <div className="rounded-xl border border-mint/30 bg-gradient-to-r from-violet-600/20 to-mint/10 px-3 py-2 text-center text-sm text-white">
+          🎟️ {view.status === "open" ? "Entry" : "Playing for"}: {stakeLine} <span className="text-white/50">(test funds)</span>
         </div>
       )}
       {countdown && countdownLeft != null && <Countdown msLeft={countdownLeft} names={view.names} mySide={view.mySide} />}
@@ -203,7 +203,7 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
           <div className="mt-3 flex gap-2">
             {view.canAccept && (
               <button className="btn-primary flex-1" disabled={pending} onClick={() => act(() => acceptChallengeAction(view.id))}>
-                {view.stakeKes > 0 ? `Accept and stake KES ${view.stakeKes.toLocaleString()}` : "Accept and play"}
+                {view.stakeKes > 0 ? `Accept · KES ${view.stakeKes.toLocaleString()}` : "Accept and play"}
               </button>
             )}
             {view.canCancel && (
@@ -310,10 +310,10 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
               {view.stakeKes > 0 && view.mySide !== null && (
                 <p className="mt-1 text-sm font-semibold">
                   {view.winnerSide === null
-                    ? `Your KES ${view.stakeKes.toLocaleString()} stake is back in your wallet.`
+                    ? `Your KES ${view.stakeKes.toLocaleString()} entry is back in your wallet.`
                     : view.winnerSide === view.mySide
                       ? `+KES ${view.prizeKes.toLocaleString()} added to your wallet.`
-                      : `You lost your KES ${view.stakeKes.toLocaleString()} stake.`}
+                      : `Your KES ${view.stakeKes.toLocaleString()} entry went to the winner.`}
                 </p>
               )}
             </div>

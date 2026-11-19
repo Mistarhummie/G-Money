@@ -20,7 +20,7 @@ export function StakePicker({
   const prize = value * 2 - Math.floor((value * 2 * feePercent) / 100);
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Stake">
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Entry">
         {stakes.map((s) => (
           <button
             key={s}
@@ -28,8 +28,8 @@ export function StakePicker({
             role="radio"
             aria-checked={value === s}
             onClick={() => onChange(s)}
-            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-              value === s ? "border-amber-300 bg-amber-400/25 text-amber-100" : "border-white/15 text-white/80"
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition active:scale-95 ${
+              value === s ? "border-violet-400 bg-violet-600/30 text-white shadow-[0_0_14px_-4px_rgb(124_58_237/0.9)]" : "border-white/15 text-white/80 hover:border-white/30"
             }`}
           >
             {s === 0 ? "Free" : `KES ${s.toLocaleString()}`}
@@ -37,7 +37,7 @@ export function StakePicker({
         ))}
       </div>
       <p className="text-xs text-white/60">
-        {value === 0 ? "Just for fun, no stake." : `You each put in KES ${value.toLocaleString()}. Winner gets KES ${prize.toLocaleString()} of test funds.`}
+        {value === 0 ? "Just for fun, no entry." : `You each put in KES ${value.toLocaleString()}. Winner gets KES ${prize.toLocaleString()} of test funds.`}
       </p>
     </div>
   );

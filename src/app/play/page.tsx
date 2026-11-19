@@ -42,15 +42,15 @@ export default async function GamesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Games</h1>
+        <h1 className="text-3xl">Games</h1>
         <p className="text-white/70">Our own skill games. Clear a stage to unlock the next one, play real people online, and climb the leaderboards.</p>
         {total > 0 && <p className="mt-1 text-sm text-emerald-300">{total} {total === 1 ? "player" : "players"} online right now</p>}
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="reveal grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Link href="/play/ludo">
-          <div className="group flex h-full flex-col gap-1 rounded-2xl border border-rose-400/30 bg-gradient-to-br from-rose-600/40 via-amber-500/25 to-sky-700/40 p-4 transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/40">
-            <span className="text-4xl transition duration-300 group-hover:scale-110 group-hover:-rotate-6">🎲</span>
-            <h2 className="font-semibold">Ludo</h2>
+          <div className="group flex h-full flex-col gap-1 rounded-2xl border border-rose-400/30 bg-gradient-to-br from-rose-600/40 via-amber-500/25 to-sky-700/40 p-4 card-link">
+            <span className="text-4xl transition duration-300 group-hover:scale-110 group-hover:-rotate-6">🏁</span>
+            <h2 className="text-lg">Ludo</h2>
             <p className="text-xs text-white/70">Roll, race and capture: classic four-colour Ludo</p>
             <p className="mt-auto pt-1 text-xs font-medium text-white/90">5 stages · vs computer · play online</p>
           </div>
@@ -60,10 +60,10 @@ export default async function GamesPage() {
           return (
             <Link key={k} href={`/play/${k}`}>
               <div
-                className={`group flex h-full flex-col gap-1 rounded-2xl border bg-gradient-to-br p-4 transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/40 ${COLOURS[k]}`}
+                className={`group flex h-full flex-col gap-1 rounded-2xl border bg-gradient-to-br p-4 card-link ${COLOURS[k]}`}
               >
                 <span className="text-4xl transition duration-300 group-hover:scale-110 group-hover:-rotate-6">{ICONS[k]}</span>
-                <h2 className="font-semibold">{g.name}</h2>
+                <h2 className="text-lg">{g.name}</h2>
                 <p className="text-xs text-white/70">{g.tagline}</p>
                 <p className="mt-auto pt-1 text-xs font-medium text-white/90">
                   {g.stages.length} stages{g.kind === "versus" ? " · vs computer" : ""} · play online

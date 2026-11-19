@@ -79,17 +79,20 @@ function passwordPage(next: string, wrong: boolean) {
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>G-Money test site</title>
+<meta name="theme-color" content="#0b1020"><link rel="icon" href="/icon.svg">
 <style>
-  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07130e;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;box-sizing:border-box}
-  form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px;background:#0d2219;border:1px solid #1f4434;border-radius:16px;padding:24px}
-  h1{margin:0;font-size:22px;color:#34d399}
-  p{margin:0;color:#ffffffb3;font-size:14px;line-height:1.4}
-  input{font-size:16px;padding:12px;border-radius:10px;border:1px solid #2d5a46;background:#07130e;color:#fff}
-  button{font-size:16px;font-weight:600;padding:12px;border:0;border-radius:10px;background:#10b981;color:#04140d}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(40rem 24rem at 80% 0%,#7c3aed40,transparent 60%),radial-gradient(30rem 20rem at 0% 100%,#22d3a61f,transparent 60%),#070a15;color:#fff;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;box-sizing:border-box}
+  form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px;background:linear-gradient(180deg,#151b36,#0b1020);border:1px solid #2a3256;border-radius:20px;padding:24px;box-shadow:0 24px 60px -30px #7c3aedcc}
+  img{width:150px;height:60px;margin:0 auto 4px}
+  p{margin:0;color:#ffffffb3;font-size:14px;line-height:1.4;text-align:center}
+  input{font-size:16px;padding:12px;border-radius:12px;border:1px solid #2a3256;background:#070a15;color:#fff}
+  input:focus{outline:none;border-color:#a78bfa;box-shadow:0 0 0 3px #7c3aed4d}
+  button{font-size:16px;font-weight:800;padding:12px;border:0;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed 55%,#5b21b6);color:#fff;box-shadow:0 8px 24px -10px #7c3aed;cursor:pointer;transition:transform .15s}
+  button:active{transform:scale(.97)}
   .err{color:#f87171}
 </style></head>
 <body><form method="post" action="${ENTER_PATH}">
-  <h1>G-Money</h1>
+  <img src="/brand/logo-on-dark.svg" alt="G-Money">
   <p>This is a test site. Enter the password you were given.</p>
   <input type="hidden" name="next" value="${escapeHtml(next)}">
   <input name="password" type="password" autocomplete="current-password" placeholder="Password" required autofocus>
@@ -104,5 +107,5 @@ function passwordPage(next: string, wrong: boolean) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|brand/).*)"],
 };

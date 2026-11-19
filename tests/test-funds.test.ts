@@ -96,7 +96,7 @@ describe("staked matches", () => {
   it("needs enough funds, only allows the listed stakes, and refuses stakes on the real site", async () => {
     const a = await joinWithUsername(db, "echo");
     const b = await joinWithUsername(db, "foxtrot");
-    await expect(createChallenge(db, a, { game: "connect4", stake: 123 })).rejects.toThrow("stakes shown");
+    await expect(createChallenge(db, a, { game: "connect4", stake: 123 })).rejects.toThrow("entry amounts shown");
     // Spend down b's funds, then b can't take on a 5,000 match.
     for (let i = 0; i < 10; i++) {
       const c = await createChallenge(db, a, { game: "chessbot", stake: 5000 });

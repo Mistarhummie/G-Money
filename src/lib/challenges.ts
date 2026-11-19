@@ -45,7 +45,7 @@ function parseStake(raw: unknown): number {
   const stake = Math.trunc(Number(raw ?? 0)) || 0;
   if (stake === 0) return 0;
   if (!config.testFunds()) throw new UserError("Matches are free to play");
-  if (!(STAKES as readonly number[]).includes(stake)) throw new UserError("Pick one of the stakes shown");
+  if (!(STAKES as readonly number[]).includes(stake)) throw new UserError("Pick one of the entry amounts shown");
   return stake;
 }
 

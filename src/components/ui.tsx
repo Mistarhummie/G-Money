@@ -1,8 +1,9 @@
+import { ViewTransition } from "react";
 import type { Tournament } from "@/db/schema";
 import { GAMES } from "@/lib/games/catalog";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 ${className}`}>{children}</div>;
+  return <div className={`rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4 ${className}`}>{children}</div>;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -46,23 +47,39 @@ const BRAND_COLORS: Record<string, string> = {
   PlayStation: "from-blue-600 to-blue-900",
   Xbox: "from-green-600 to-green-900",
   Steam: "from-slate-600 to-slate-900",
-  "Google Play": "from-teal-500 to-emerald-800",
+  "Google Play": "from-teal-500 to-cyan-900",
   Apple: "from-zinc-500 to-zinc-800",
   Netflix: "from-red-600 to-red-900",
 };
 
 /** A coloured tile with the brand name, or the supplier's logo when there is one. */
-export function BrandTile({ brand, logoUrl, className = "" }: { brand: string; logoUrl?: string | null; className?: string }) {
-  if (logoUrl) {
+export function BrandTile({
+  brand,
+  logoUrl,
+  className = "",
+  morphId,
+}: {
+  brand: string;
+  logoUrl?: string | null;
+  className?: string;
+  /** Same id on the shop grid and the card page makes the tile glide between them. */
+  morphId?: string;
+}) {
+  const tile = logoUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={logoUrl} alt={brand} className={`aspect-[16/10] w-full rounded-xl bg-white object-contain p-3 ${className}`} />;
-  }
-  return (
+    <img src={logoUrl} alt={brand} className={`card-shine aspect-[16/10] w-full rounded-xl bg-white object-contain p-3 ${className}`} />
+  ) : (
     <div
-      className={`flex aspect-[16/10] w-full items-center justify-center rounded-xl bg-gradient-to-br ${BRAND_COLORS[brand] ?? "from-emerald-600 to-emerald-900"} p-3 text-center text-lg font-bold ${className}`}
+      className={`card-shine flex aspect-[16/10] w-full items-center justify-center rounded-xl bg-gradient-to-br ${BRAND_COLORS[brand] ?? "from-violet-600 to-navy"} p-3 text-center font-display text-lg font-black shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] ${className}`}
     >
       {brand}
     </div>
+  );
+  if (!morphId) return tile;
+  return (
+    <ViewTransition name={`card-${morphId}`} share="morph" default="none">
+      {tile}
+    </ViewTransition>
   );
 }
 
