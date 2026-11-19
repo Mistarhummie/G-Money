@@ -69,6 +69,23 @@ export async function syncProducts(db: Db, admin: User, supplier: GiftCardSuppli
   return list.length;
 }
 
+/**
+ * Test supplier only: makes sure every placeholder card is in the shop, on sale. Cards the admin has hidden stay hidden.
+ * Lets the test site show the full range without anyone pressing "Load cards" first.
+ */
+export async function ensureTestCatalog(db: Db, supplier: GiftCardSupplier): Promise<void> {
+  if (supplier.name !== "test") return;
+  const list = await supplier.listProducts("US");
+  const have = await db.select({ id: products.supplierProductId }).from(products).where(eq(products.supplier, "test"));
+  const known = new Set(have.map((r) => r.id));
+  const missing = list.filter((p) => !known.has(p.supplierProductId));
+  if (missing.length === 0) return;
+  await db
+    .insert(products)
+    .values(missing.map((p) => ({ supplier: "test", ...p, enabled: true })))
+    .onConflictDoNothing();
+}
+
 export async function setProductEnabled(db: Db, admin: User, productId: string, enabled: boolean): Promise<void> {
   if (!admin.isAdmin) throw new UserError("Only admins can change products");
   await db.update(products).set({ enabled }).where(eq(products.id, productId));
