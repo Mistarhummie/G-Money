@@ -21,8 +21,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   return (
     <div className="mx-auto grid max-w-3xl gap-6 sm:grid-cols-[2fr_3fr]">
       <div className="flex flex-col gap-3">
-        <BrandTile brand={row.brand} logoUrl={row.logoUrl} />
-        <h1 className="text-xl font-bold">{row.name}</h1>
+        <BrandTile brand={row.brand} logoUrl={row.logoUrl} morphId={row.id} />
+        <h1 className="text-2xl">{row.name}</h1>
         <p className="rounded-lg bg-amber-500/10 p-2 text-sm text-amber-200">
           Works only on {row.countryCode} accounts. Check your account region before buying. Codes cannot be returned once shown.
         </p>

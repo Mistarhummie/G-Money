@@ -1,37 +1,438 @@
 @import "tailwindcss";
 
+/*
+ * G-Money "night gamer" brand. Navy carries the page, violet is for actions and highlights,
+ * mint is for small accents (prices, success, the game buttons). See the brand guide.
+ */
 :root {
-  --background: #07130e;
-  --foreground: #e8f5ee;
+  --navy: #0b1020;
+  --navy-deep: #070a15;
+  --surface: #10152a;
+  --line: #1f2742;
+  --violet: #7c3aed;
+  --mint: #22d3a6;
+  --lilac: #c4b5fd;
+  --background: var(--navy-deep);
+  --foreground: #eef0f8;
+  --muted: #9aa0ba;
+
+  /* Motion: quick on the way out, gentle on the way in. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-exit: 120ms;
+  --duration-enter: 260ms;
+}
+
+@theme {
+  /* Tailwind's emerald scale is re-pointed at the brand mint, so every existing accent follows the brand. */
+  --color-emerald-50: #ecfdf7;
+  --color-emerald-100: #cffaec;
+  --color-emerald-200: #a0f2da;
+  --color-emerald-300: #5fe6c2;
+  --color-emerald-400: #22d3a6;
+  --color-emerald-500: #14b88f;
+  --color-emerald-600: #0c9474;
+  --color-emerald-700: #0b765e;
+  --color-emerald-800: #0c5d4b;
+  --color-emerald-900: #0b4d3f;
+  --color-emerald-950: #042c24;
+
+  --color-navy: #0b1020;
+  --color-navy-deep: #070a15;
+  --color-surface: #10152a;
+  --color-mint: #22d3a6;
+  --color-lilac: #c4b5fd;
+  --color-brand-violet: #7c3aed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-nunito);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgb(124 58 237 / 0.16), transparent 60%),
+    radial-gradient(40rem 24rem at -10% 10%, rgb(34 211 166 / 0.07), transparent 60%),
+    var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-nunito), "Arial Rounded MT Bold", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+h1 {
+  font-weight: 900;
+}
+h2,
+h3 {
+  font-weight: 800;
+}
+
+::selection {
+  background: rgb(124 58 237 / 0.45);
+}
+
+:focus-visible {
+  outline: 2px solid var(--lilac);
+  outline-offset: 2px;
 }
 
 @layer components {
   .btn-primary {
-    @apply rounded-xl bg-emerald-500 px-4 py-2 font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-display font-extrabold text-white disabled:opacity-50;
+    background: linear-gradient(135deg, #8b5cf6 0%, var(--violet) 55%, #5b21b6 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.25),
+      0 8px 24px -10px rgb(124 58 237 / 0.9);
+    transition:
+      transform 160ms var(--ease-out),
+      filter 160ms,
+      box-shadow 200ms;
   }
   .btn-secondary {
-    @apply rounded-xl border border-white/20 px-4 py-2 font-medium text-white/90 transition hover:bg-white/10 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-4 py-2 font-display font-bold text-white/90 hover:border-lilac/50 hover:bg-white/10 disabled:opacity-50;
+    transition:
+      transform 160ms var(--ease-out),
+      background-color 160ms,
+      border-color 160ms;
   }
   .btn-danger {
-    @apply rounded-xl border border-red-400/40 px-4 py-2 font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/40 px-4 py-2 font-medium text-red-300 hover:bg-red-500/10 disabled:opacity-50;
+    transition:
+      transform 160ms var(--ease-out),
+      background-color 160ms;
   }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.1);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 10px 30px -8px rgb(124 58 237 / 1),
+      0 0 0 1px rgb(196 181 253 / 0.25);
+  }
+  .btn-primary:hover:not(:disabled),
+  .btn-secondary:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  /* Mint call to action for success moments (code ready, prize won). */
+  .btn-mint {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-display font-extrabold text-navy;
+    background: linear-gradient(135deg, #5fe6c2, var(--mint) 60%, #14b88f);
+    box-shadow: 0 8px 24px -10px rgb(34 211 166 / 0.9);
+    transition: transform 160ms var(--ease-out), filter 160ms;
+  }
+  .btn-mint:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  /* Gradient headline text, violet into lilac into mint. */
+  .text-gradient {
+    background: linear-gradient(100deg, #fff 10%, var(--lilac) 45%, var(--mint) 95%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Soft mint light behind prices. */
+  .price-glow {
+    color: var(--mint);
+    text-shadow: 0 0 18px rgb(34 211 166 / 0.45);
+  }
+  /* A thin gradient line, used under the header and as dividers. */
+  .glow-line {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(124 58 237 / 0.7), rgb(34 211 166 / 0.6), transparent);
+  }
+  .btn-primary:active:not(:disabled),
+  .btn-secondary:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: 60ms;
+  }
+
   .input {
-    @apply w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-white placeholder:text-white/40 focus:border-emerald-400 focus:outline-none;
+    @apply w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-white placeholder:text-white/40 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 focus:outline-none;
+    transition:
+      border-color 160ms,
+      box-shadow 160ms;
   }
   .label {
     @apply flex flex-col gap-1 text-sm text-white/80;
+  }
+
+  /* Cards that lead somewhere lift a little on hover and press down on tap. */
+  .card-link {
+    transition:
+      transform 200ms var(--ease-out),
+      border-color 200ms,
+      background-color 200ms,
+      box-shadow 200ms;
+  }
+  .card-link:hover {
+    transform: translateY(-3px);
+    border-color: rgb(196 181 253 / 0.45);
+    background-color: rgb(255 255 255 / 0.07);
+    box-shadow:
+      0 16px 36px -18px rgb(124 58 237 / 0.85),
+      0 0 0 1px rgb(124 58 237 / 0.2);
+  }
+  /* A light sweep across the card art on hover. */
+  .card-shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .card-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.28) 48%, transparent 66%);
+    transform: translateX(-120%);
+    transition: transform 650ms var(--ease-out);
+    pointer-events: none;
+  }
+  .card-link:hover .card-shine::after {
+    transform: translateX(120%);
+  }
+  .card-link:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 80ms;
+  }
+
+  .nav-link {
+    @apply relative text-white/75 hover:text-white;
+    transition: color 160ms;
+  }
+  .nav-link::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -6px 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--mint);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms var(--ease-out);
+  }
+  .nav-link:hover::after,
+  .nav-link[aria-current="page"]::after {
+    transform: scaleX(1);
+  }
+  .nav-link[aria-current="page"] {
+    @apply text-white;
+  }
+
+  /* Grids and lists reveal their items one after another. Only transform and opacity animate. */
+  .reveal > * {
+    animation: rise var(--duration-enter) var(--ease-out) both;
+  }
+  .reveal > *:nth-child(2) { animation-delay: 40ms; }
+  .reveal > *:nth-child(3) { animation-delay: 80ms; }
+  .reveal > *:nth-child(4) { animation-delay: 120ms; }
+  .reveal > *:nth-child(5) { animation-delay: 160ms; }
+  .reveal > *:nth-child(6) { animation-delay: 200ms; }
+  .reveal > *:nth-child(7) { animation-delay: 230ms; }
+  .reveal > *:nth-child(8) { animation-delay: 260ms; }
+  .reveal > *:nth-child(n + 9) { animation-delay: 280ms; }
+
+  /* Loading placeholders. */
+  .skeleton {
+    @apply rounded-xl bg-white/[0.06];
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(196 181 253 / 0.1), transparent);
+    animation: shimmer 1.3s ease-in-out infinite;
+  }
+  .spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: spin 0.7s linear infinite;
+  }
+
+  /* Hero with slowly drifting brand light. One element, transform only, cheap on budget phones. */
+  .hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(135deg, #141a3a 0%, var(--navy) 55%, #0d1a24 100%);
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 140%;
+    height: 160%;
+    left: -20%;
+    top: -30%;
+    background:
+      radial-gradient(closest-side at 70% 35%, rgb(124 58 237 / 0.45), transparent),
+      radial-gradient(closest-side at 25% 75%, rgb(34 211 166 / 0.18), transparent);
+    animation: drift 14s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .hero-hex {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    opacity: 0.08;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48' viewBox='0 0 56 48'%3E%3Cpath d='M14 1h28l13 23-13 23H14L1 24z' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-size: 56px 48px;
+    mask-image: linear-gradient(110deg, transparent 35%, #000 100%);
+  }
+}
+
+/* Game posters */
+.poster-art {
+  transition:
+    transform 220ms var(--ease-out),
+    box-shadow 220ms;
+}
+.poster-figure {
+  transition: transform 320ms var(--ease-out);
+}
+.poster-title {
+  text-shadow:
+    0 2px 0 rgb(0 0 0 / 0.45),
+    0 0 18px rgb(0 0 0 / 0.5);
+  -webkit-text-stroke: 0.5px rgb(0 0 0 / 0.25);
+}
+.poster a:hover .poster-art {
+  transform: translateY(-4px);
+  box-shadow:
+    0 18px 34px -16px rgb(124 58 237 / 0.9),
+    0 0 0 1px rgb(196 181 253 / 0.35);
+}
+.poster a:hover .poster-figure {
+  transform: scale(1.06) rotate(-2deg);
+}
+.poster a:active .poster-art {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+.poster-row {
+  scrollbar-width: none;
+}
+.poster-row::-webkit-scrollbar {
+  display: none;
+}
+.heart-pop {
+  animation: heart 320ms var(--ease-out);
+}
+@keyframes heart {
+  40% {
+    transform: scale(1.3);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes drift {
+  from {
+    transform: translate3d(-4%, -2%, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) rotate(8deg);
+  }
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-pop {
+  animation: pop 220ms var(--ease-out) both;
+}
+
+/*
+ * Page transitions (browser View Transitions, driven by React's <ViewTransition> around the page).
+ * The header stays still; only the page content fades and rises. Browsers without support just swap pages.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-old(.page) {
+  animation: var(--duration-exit) ease-out both fade-out;
+}
+::view-transition-new(.page) {
+  animation: var(--duration-enter) var(--ease-out) var(--duration-exit) both rise;
+}
+::view-transition-group(.morph) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--ease-out);
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Respect the phone's "reduce motion" setting: no movement, instant changes. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

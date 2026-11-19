@@ -1,10 +1,14 @@
 {
   "name": "G-Money",
   "short_name": "G-Money",
-  "description": "Skill-based gaming tournaments for Kenyan gamers",
+  "description": "Gaming gift cards paid with M-Pesa, plus skill games and tournaments",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#07130e",
-  "theme_color": "#07130e",
-  "icons": [{ "src": "/favicon.ico", "sizes": "64x64", "type": "image/x-icon" }]
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/brand/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
 }

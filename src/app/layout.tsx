@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Nunito } from "next/font/google";
+import Image from "next/image";
+import { ViewTransition } from "react";
 import Link from "next/link";
+import { NavLink } from "@/components/NavLink";
 import { getDb } from "@/db";
 import { needsMe } from "@/lib/challenges";
 import { config } from "@/lib/config";
@@ -9,16 +12,18 @@ import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "./actions";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
+const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin"], weight: ["700", "800", "900"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "G-Money: gaming gift cards",
   description: "Gaming gift cards paid with M-Pesa, plus skill tournaments for Kenyan gamers.",
   manifest: "/manifest.webmanifest",
+  applicationName: "G-Money",
+  openGraph: { title: "G-Money: gaming gift cards", siteName: "G-Money", images: ["/brand/banner.png"] },
 };
 
-export const viewport: Viewport = { themeColor: "#07130e" };
+export const viewport: Viewport = { themeColor: "#0b1020" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -36,33 +41,33 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           .catch(() => null)
       : null;
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${nunito.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <header className="sticky top-0 z-10 border-b border-white/10 bg-[#07130e]/90 backdrop-blur">
+        <header className="sticky top-0 z-10 bg-navy/80 backdrop-blur-md">
           <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm">
-            <Link href="/" className="mr-auto text-lg font-bold tracking-tight">
-              G<span className="text-emerald-400">-Money</span>
+            <Link href="/" className="mr-auto -my-1 shrink-0 transition-opacity hover:opacity-90" aria-label="G-Money home">
+              <Image src="/brand/logo-on-dark.svg" alt="G-Money" width={125} height={50} priority className="h-[50px] w-[125px]" />
             </Link>
-            <Link href="/" className="text-white/80 hover:text-white">Shop</Link>
-            <Link href="/tournaments" className="text-white/80 hover:text-white">Tournaments</Link>
-            <Link href="/play" className="text-white/80 hover:text-white">Games</Link>
+            <NavLink href="/">Shop</NavLink>
+            <NavLink href="/tournaments">Tournaments</NavLink>
+            <NavLink href="/play">Games</NavLink>
             {waiting?.href && (
               <Link
                 href={waiting.href}
-                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-bold text-amber-950 hover:bg-amber-300"
+                className="inline-flex items-center gap-1.5 rounded-full bg-mint px-2.5 py-0.5 text-xs font-bold text-navy transition hover:brightness-110 animate-pop"
                 title={waiting.count > 1 ? `${waiting.count} matches need you` : undefined}
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-950" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-navy" />
                 {waiting.label}
-                {waiting.count > 1 && <span className="rounded-full bg-amber-950/80 px-1.5 text-amber-200">{waiting.count}</span>}
+                {waiting.count > 1 && <span className="rounded-full bg-navy/80 px-1.5 text-mint">{waiting.count}</span>}
               </Link>
             )}
-            {user && <Link href="/orders" className="text-white/80 hover:text-white">My orders</Link>}
-            {user?.isAdmin && <Link href="/admin" className="text-amber-300 hover:text-amber-200">Admin</Link>}
+            {user && <NavLink href="/orders">My orders</NavLink>}
+            {user?.isAdmin && <NavLink href="/admin" className="nav-link !text-lilac">Admin</NavLink>}
             {balance != null && (
               <Link
                 href="/profile"
-                className="rounded-full border border-amber-300/40 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-100"
+                className="rounded-full border border-mint/40 bg-mint/10 px-2.5 py-0.5 font-display text-xs font-extrabold text-mint transition hover:bg-mint/20"
                 title="Test funds: not real money"
               >
                 KES {balance.toLocaleString()}
@@ -70,18 +75,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             )}
             {user ? (
               <>
-                <Link href="/profile" className="text-white/80 hover:text-white">{user.username ?? "Profile"}</Link>
+                <NavLink href="/profile">{user.username ?? "Profile"}</NavLink>
                 <form action={signOutAction}>
-                  <button className="text-white/60 hover:text-white">Sign out</button>
+                  <button className="text-white/60 transition-colors hover:text-white">Sign out</button>
                 </form>
               </>
             ) : (
               <Link href="/login" className="btn-primary !py-1.5">{testFunds ? "Join" : "Sign in"}</Link>
             )}
           </nav>
+          <div className="glow-line" />
         </header>
         {testFunds && !user && (
-          <div className="bg-amber-400/15 px-4 py-2 text-center text-sm text-amber-100">
+          <div className="bg-violet-600/20 px-4 py-2 text-center text-sm text-lilac">
             Test site: <Link href="/login" className="font-semibold underline">pick a username</Link> and get KES{" "}
             {config.testFundsKes.toLocaleString()} in test funds to play other people live.
           </div>
@@ -91,8 +97,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             Your account is suspended: {user.banReason}. Contact support to appeal.
           </div>
         )}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
-        <footer className="border-t border-white/10 px-4 py-6 text-center text-xs text-white/50">
+        <ViewTransition default="page">
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">{children}</main>
+        </ViewTransition>
+        <div className="glow-line opacity-60" />
+        <footer className="px-4 py-8 text-center text-xs text-white/50">
+          <Image src="/brand/icon.svg" alt="" width={32} height={32} className="mx-auto mb-3 h-8 w-8 rounded-lg" />
           Gift cards from authorised distributors. Tournaments are skill games only. 18+.
         </footer>
       </body>

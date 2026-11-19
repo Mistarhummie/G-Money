@@ -33,7 +33,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-4">
       <div className="flex items-center gap-3">
-        <BrandTile brand={product.brand} logoUrl={product.logoUrl} className="!w-28 text-sm" />
+        <BrandTile brand={product.brand} logoUrl={product.logoUrl} className="!w-28 text-sm" compact />
         <div>
           <h1 className="text-lg font-bold">{product.name}</h1>
           <p className="text-white/70">{formatFace(order.faceCents, product.currency)}</p>

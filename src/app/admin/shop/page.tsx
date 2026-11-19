@@ -135,7 +135,7 @@ export default async function ShopAdminPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {list.map((p) => (
             <Card key={p.id} className="flex gap-3">
-              <BrandTile brand={p.brand} logoUrl={p.logoUrl} className="!w-24 text-xs" />
+              <BrandTile brand={p.brand} logoUrl={p.logoUrl} className="!w-24 text-xs" compact />
               <div className="flex flex-1 flex-col gap-1 text-sm">
                 <p className="font-medium">{p.name}</p>
                 <p className="text-xs text-white/60">

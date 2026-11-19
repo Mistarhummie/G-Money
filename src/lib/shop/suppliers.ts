@@ -34,12 +34,21 @@ export interface GiftCardSupplier {
 // ---------------------------------------------------------------- test supplier
 
 const TEST_CATALOG: SupplierProduct[] = [
+  // The first six keep their ids (test-1 to test-6) so existing test orders still match.
   { brand: "PlayStation", name: "PlayStation Store (US)", faces: [1000, 2500, 5000, 10000] },
   { brand: "Xbox", name: "Xbox (US)", faces: [1500, 2500, 5000] },
   { brand: "Steam", name: "Steam Wallet (US)", faces: [500, 1000, 2000, 5000] },
   { brand: "Google Play", name: "Google Play (US)", faces: [1000, 2500, 5000] },
   { brand: "Apple", name: "App Store & iTunes (US)", faces: [1000, 2500, 5000] },
   { brand: "Netflix", name: "Netflix (US)", faces: [2500, 5000] },
+  // Placeholders for other brands Reloadly lists for buyers in Kenya. Real names and prices come from Reloadly later.
+  { brand: "Amazon", name: "Amazon.com (US)", faces: [1000, 2500, 5000, 10000] },
+  { brand: "eBay", name: "eBay (US)", faces: [1000, 2500, 5000] },
+  { brand: "Nintendo", name: "Nintendo eShop (US)", faces: [1000, 2000, 3500, 5000] },
+  { brand: "Roblox", name: "Roblox (US)", faces: [1000, 2500, 5000] },
+  { brand: "Razer Gold", name: "Razer Gold (US)", faces: [500, 1000, 2000, 5000] },
+  { brand: "Spotify", name: "Spotify Premium (US)", faces: [1000, 3000, 6000] },
+  { brand: "Walmart", name: "Walmart (US)", faces: [2500, 5000, 10000] },
 ].map((p, i) => ({
   supplierProductId: `test-${i + 1}`,
   brand: p.brand,
