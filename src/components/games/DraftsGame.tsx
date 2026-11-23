@@ -23,7 +23,7 @@ function viewOf(g: DraftsState, last: number[]): View {
   return { board: Array.from(g.board), turn: g.turn, result: g.result, moves: g.turn === 1 && !g.result ? g.moves : [], last, ply: g.plies };
 }
 
-export default function DraftsGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function DraftsGame({ seed, stage, onFinish, timeUp }: GameComponentProps) {
   // The game object is mutable and only touched in event handlers; `view` drives rendering.
   const [game] = useState(() => newGame(seed, stage));
   const [view, setView] = useState(() => viewOf(game, []));
@@ -41,6 +41,11 @@ export default function DraftsGame({ seed, stage, onFinish }: GameComponentProps
     finished.current = true;
     onFinish(all.join(" "));
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish(tokens);
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function commit(m: Move) {
     if (finished.current || game.turn !== 1) return;

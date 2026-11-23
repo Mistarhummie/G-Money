@@ -51,6 +51,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <NavLink href="/">Shop</NavLink>
             <NavLink href="/tournaments">Tournaments</NavLink>
             <NavLink href="/play">Games</NavLink>
+            <NavLink href="/leaderboards">Leaderboards</NavLink>
             {waiting?.href && (
               <Link
                 href={waiting.href}

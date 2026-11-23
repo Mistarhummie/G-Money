@@ -44,7 +44,7 @@ type Visual = {
 /** The game hands itself in this long before the server's time limit, leaving room for network delays. */
 const END_MS = MAX_MS - 15_000;
 
-export default function SnakeGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
+export default function SnakeGame({ seed, stage, onFinish, onProgress, timeUp }: GameComponentProps) {
   const { tickMs, target } = stageConfig(stage);
   const [preview] = useState(() => newGame(seed, stage));
   const walls = preview.walls;
@@ -92,6 +92,11 @@ export default function SnakeGame({ seed, stage, onFinish, onProgress }: GameCom
     setOver(true);
     finishRef.current(encodeInput(turns.current, ticks.current));
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish();
+  }, [timeUp]);
 
   function press(dir: Dir) {
     if (finished.current) return;

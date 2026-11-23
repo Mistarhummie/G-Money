@@ -9,6 +9,7 @@ import {
   MAX_MS,
   newGame,
   nextPiece,
+  speedLevel,
   stageConfig,
   tick,
   TICK_MS,
@@ -24,7 +25,7 @@ import { useGameFx, type PopOptions } from "./fx/GameFx";
 import { prefersReducedMotion, useTweened, vibrate } from "./fx/motion";
 import { useReportProgress } from "./useProgress";
 
-type View = { next: number; spawned: number; lines: number; score: number; alive: boolean };
+type View = { next: number; spawned: number; lines: number; score: number; alive: boolean; speed: number };
 
 const snapshot = (s: BlocksState): View => ({
   next: nextPiece(s),
@@ -32,6 +33,7 @@ const snapshot = (s: BlocksState): View => ({
   lines: s.lines,
   score: s.score,
   alive: s.alive,
+  speed: speedLevel(s),
 });
 
 const swatch = (type: number) => {
@@ -61,7 +63,7 @@ const KEYS: Record<string, Action> = {
 /** The game hands itself in this long before the server's time limit, leaving room for network delays. */
 const END_MS = MAX_MS - 15_000;
 
-export default function BlocksGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
+export default function BlocksGame({ seed, stage, onFinish, onProgress, timeUp }: GameComponentProps) {
   const { target } = stageConfig(stage);
   const [preview] = useState(() => newGame(seed, stage));
   const [view, setView] = useState<View>(() => snapshot(preview));
@@ -176,6 +178,11 @@ export default function BlocksGame({ seed, stage, onFinish, onProgress }: GameCo
     finishRef.current(encodeInput(actions.current, ticks.current));
   }
 
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish();
+  }, [timeUp]);
+
   function start() {
     if (game.current || finished.current) return;
     game.current = newGame(seed, stage);
@@ -225,8 +232,9 @@ export default function BlocksGame({ seed, stage, onFinish, onProgress }: GameCo
       }
       if (acc > TICK_MS) acc = TICK_MS;
       // Only re-render the panel when something it shows changed; the board is drawn on the canvas.
-      const key = `${s.score},${s.lines},${s.queue.length},${s.alive}`;
+      const key = `${s.score},${s.lines},${s.queue.length},${s.alive},${speedLevel(s)}`;
       if (key !== drawn) {
+        if (drawn && speedLevel(s) > Number(drawn.split(",")[4])) say(`Speed ${speedLevel(s)}`, { tone: "warn", emoji: "⚡", sub: "The blocks are falling faster" }, true);
         drawn = key;
         setView(snapshot(s));
       }
@@ -383,7 +391,10 @@ export default function BlocksGame({ seed, stage, onFinish, onProgress }: GameCo
             <span key={view.lines} className="inline-block font-semibold text-cyan-300" style={{ animation: view.lines ? "blocks-bump .3s ease-out" : undefined }}>
               {view.lines}
             </span>
-            /{target} · <span className="font-semibold text-amber-200">{Math.round(shownScore).toLocaleString()}</span> pts
+            /{target} · <span className="font-semibold text-amber-200">{Math.round(shownScore).toLocaleString()}</span> pts ·{" "}
+            <span key={`s${view.speed}`} className="inline-block font-semibold text-fuchsia-300" style={{ animation: view.speed > 1 ? "blocks-bump .4s ease-out" : undefined }}>
+              ⚡{view.speed}
+            </span>
           </span>
           <button
             type="button"

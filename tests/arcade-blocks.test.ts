@@ -9,6 +9,7 @@ import {
   MAX_TICKS,
   newGame,
   nextPiece,
+  RAMP_TICKS,
   stageConfig,
   tick,
   TICK_MS,
@@ -139,9 +140,10 @@ describe("blocks", () => {
     expect(v.valid).toBe(true);
     expect(ms).toBeLessThan(3000);
 
-    // The full 30 minutes of ticks (stage 1, slow enough for one piece every 150 ticks).
-    const full = play(78, 1, 150);
-    expect(full.ticks).toBe(MAX_TICKS);
+    // A long game at stage 1: the blocks speed up every 20 seconds, so even a quick player tops out in the end.
+    const full = play(78, 1, 10);
+    expect(full.ticks).toBeGreaterThan(RAMP_TICKS * 6);
+    expect(full.ticks).toBeLessThanOrEqual(MAX_TICKS);
     const t1 = performance.now();
     expect(verifyGame(78, 1, full).valid).toBe(true);
     console.log(`blocks stage 1, ${full.ticks} ticks: verify ${(performance.now() - t1).toFixed(1)} ms`);

@@ -5,6 +5,8 @@ import { challenges, entries, gameProgress, gameSessions, tournaments, users, ty
 import { afterRaceRound, RACE_WINDOW_MS } from "./challenges";
 import { UserError } from "./errors";
 import { ARCADE, isArcadeKey, type ArcadeKey } from "./games/arcade";
+import { levelLimitMs, levelPoints } from "./games/weekly-rules";
+import { levelDeadlineMs, levelToStart, recordLevel } from "./weekly";
 
 /** Stages a player may start: stage 1, and every stage after one they have cleared. */
 export async function unlockedStages(db: Db, userId: string, game: ArcadeKey): Promise<number> {
@@ -18,7 +20,7 @@ export async function unlockedStages(db: Db, userId: string, game: ArcadeKey): P
 export async function startSession(
   db: Db,
   user: User,
-  input: { game: string; stage?: number; tournamentId?: string | null; challengeId?: string | null },
+  input: { game: string; stage?: number; tournamentId?: string | null; challengeId?: string | null; runId?: string | null },
   now = new Date(),
 ): Promise<{ sessionId: string; seed: number; stage: number }> {
   if (user.bannedAt) throw new UserError("Your account is suspended");
@@ -28,6 +30,14 @@ export async function startSession(
     let stage = Math.trunc(Number(input.stage ?? 1));
     const tournamentId = input.tournamentId || null;
     const challengeId = input.challengeId || null;
+    const runId = input.runId || null;
+    if (runId) {
+      // A weekly leaderboard run plays every level in order, whatever the player has unlocked.
+      const level = await levelToStart(tx, user, runId, game.key, now);
+      const seed = randomInt(1, 2 ** 31);
+      const [session] = await tx.insert(gameSessions).values({ userId: user.id, game: game.key, stage: level, runId, seed, startedAt: now }).returning();
+      return { sessionId: session.id, seed, stage: level };
+    }
     if (challengeId) {
       const [c] = await tx.select().from(challenges).where(eq(challenges.id, challengeId)).for("update");
       if (!c || c.kind !== "race" || c.game !== game.key) throw new UserError("Match not found");
@@ -87,6 +97,8 @@ export type SessionResult = {
   detail?: string;
   /** Set when this result unlocked the next stage. */
   unlockedStage?: number;
+  /** Weekly leaderboard runs: this level's points, the run's total, and what comes next. */
+  run?: { points: number; total: number; over: boolean; nextStage: number | null };
 };
 
 const MAX_INPUT = 500_000;
@@ -113,11 +125,14 @@ async function submitInTx(db: Db, user: User, sessionId: string, input: string, 
         ? { valid: false, cleared: false, score: 0, flagged: false, detail: "Input too long" }
         : game.verify({ seed: Number(session.seed), stage: session.stage, input, elapsedMs: timeMs });
     if (timeMs > game.timeLimitMs) verdict = { ...verdict, cleared: false, detail: "Over the time limit" };
+    if (session.runId && timeMs > levelDeadlineMs(game.key, session.stage)) verdict = { ...verdict, cleared: false, detail: "Out of time" };
     const score = verdict.valid ? Math.trunc(verdict.score) : 0;
+    const points = session.runId ? levelPoints(game.ranking, session.stage, levelLimitMs(game.key, session.stage), verdict, timeMs) : null;
     await tx
       .update(gameSessions)
-      .set({ finishedAt: now, timeMs, score, valid: verdict.valid, cleared: verdict.cleared, flagged: verdict.flagged, detail: verdict.detail ?? null })
+      .set({ finishedAt: now, timeMs, score, points, valid: verdict.valid, cleared: verdict.cleared, flagged: verdict.flagged, detail: verdict.detail ?? null })
       .where(eq(gameSessions.id, session.id));
+    const run = session.runId ? await recordLevel(tx, session.runId, game.key, session.stage, verdict, points ?? 0, timeMs, now) : undefined;
 
     let unlockedStage: number | undefined;
     // Match rounds don't count towards stage progress: the stage was the challenger's pick.
@@ -144,7 +159,7 @@ async function submitInTx(db: Db, user: User, sessionId: string, input: string, 
       if (verdict.cleared && !prev?.clearedAt && session.stage < game.stages.length) unlockedStage = session.stage + 1;
     }
     return {
-      result: { valid: verdict.valid, cleared: verdict.cleared, score, timeMs, flagged: verdict.flagged, detail: verdict.detail, unlockedStage },
+      result: { valid: verdict.valid, cleared: verdict.cleared, score, timeMs, flagged: verdict.flagged, detail: verdict.detail, unlockedStage, run },
       challengeId: session.challengeId,
     };
   });

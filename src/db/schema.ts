@@ -182,6 +182,10 @@ export const gameSessions = pgTable(
     tournamentId: text("tournament_id").references(() => tournaments.id),
     // Set for a head-to-head race between two players.
     challengeId: text("challenge_id"),
+    // Set for one level of a weekly leaderboard run.
+    runId: text("run_id"),
+    // Leaderboard points this level earned (runs only).
+    points: integer("points"),
     seed: bigint("seed", { mode: "number" }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -195,7 +199,57 @@ export const gameSessions = pgTable(
   (t) => [
     index("game_sessions_tournament_idx").on(t.tournamentId, t.userId),
     index("game_sessions_board_idx").on(t.game, t.stage, t.cleared),
+    index("game_sessions_run_idx").on(t.runId),
   ],
+);
+
+export type RunStatus = "active" | "finished";
+
+/**
+ * One paid go at a game's weekly leaderboard: every level in order, one session each. The run's points
+ * are the sum of its levels' points. It ends after the last level, or at the first level not cleared.
+ */
+export const leaderboardRuns = pgTable(
+  "leaderboard_runs",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    // Monday the week starts, Nairobi time, as YYYY-MM-DD.
+    week: text("week").notNull(),
+    feeKes: integer("fee_kes").notNull(),
+    // The level to play next (while active), 1-based.
+    stage: integer("stage").notNull().default(1),
+    points: integer("points").notNull().default(0),
+    timeMs: integer("time_ms").notNull().default(0),
+    status: text("status").$type<RunStatus>().notNull().default("active"),
+    // A level looked faster than a person can play: the run is kept out of the prizes until the admin clears it.
+    flagged: boolean("flagged").notNull().default(false),
+    detail: text("detail"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("leaderboard_runs_week_idx").on(t.game, t.week, t.status), index("leaderboard_runs_user_idx").on(t.userId, t.game, t.week)],
+);
+
+export type WeekWinner = { rank: number; userId: string; username: string | null; points: number; prizeKes: number };
+
+/** A finished week of one game's leaderboard, once its pool has been paid out. */
+export const leaderboardWeeks = pgTable(
+  "leaderboard_weeks",
+  {
+    game: text("game").$type<ArcadeKey>().notNull(),
+    week: text("week").notNull(),
+    grossKes: integer("gross_kes").notNull(),
+    platformFeeKes: integer("platform_fee_kes").notNull(),
+    poolKes: integer("pool_kes").notNull(),
+    players: integer("players").notNull(),
+    winners: jsonb("winners").$type<WeekWinner[]>().notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.game, t.week] })],
 );
 
 /** Each player's best result per game and stage. Clearing a stage unlocks the next one. */

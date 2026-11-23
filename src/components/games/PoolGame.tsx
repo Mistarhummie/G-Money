@@ -6,7 +6,7 @@ import { usePoolPopups } from "@/components/games/pool/poolFx";
 import { applyShot, computerMove, encodePlace, encodeShot, initialState, placeCue, shotError, type Shot, type State } from "@/lib/games/arcade/pool";
 import type { GameComponentProps } from "@/lib/games/arcade/types";
 
-export default function PoolGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function PoolGame({ seed, stage, onFinish, timeUp }: GameComponentProps) {
   const [game, setGame] = useState<State>(() => initialState(seed));
   const [busy, setBusy] = useState(false); // a shot is playing or the computer is at the table
   const [playback, setPlayback] = useState<Playback | null>(null);
@@ -36,6 +36,11 @@ export default function PoolGame({ seed, stage, onFinish }: GameComponentProps) 
     finished.current = true;
     onFinish(tokens.current.join(";"));
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) resign();
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Plays a shot from `from` (cue ball already placed) and shows the result afterwards. */
   function play(from: State, shot: Shot, showAim: boolean) {

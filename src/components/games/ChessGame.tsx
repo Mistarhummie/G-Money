@@ -6,7 +6,7 @@ import type { GameComponentProps } from "@/lib/games/arcade/types";
 import { CapturedTray, ChessBoard, KEYBOARD_HINT } from "./chessbot/ChessBoard";
 import { useGameFx } from "./fx/GameFx";
 
-export default function ChessGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function ChessGame({ seed, stage, onFinish, timeUp }: GameComponentProps) {
   const [pos, setPos] = useState(startPosition);
   const [playerMoves, setPlayerMoves] = useState<string[]>([]);
   const [lastMove, setLastMove] = useState<number | null>(null);
@@ -48,6 +48,11 @@ export default function ChessGame({ seed, stage, onFinish }: GameComponentProps)
     setResigned(true);
     onFinish(playerMoves.join(" "));
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) resign();
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const check = inCheck(pos);
   const statusText = status.over
