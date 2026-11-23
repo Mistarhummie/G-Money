@@ -57,6 +57,13 @@
       "when": 1794985975929,
       "tag": "0007_stakes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795434700966,
+      "tag": "0008_leaderboards",
+      "breakpoints": true
     }
   ]
 }

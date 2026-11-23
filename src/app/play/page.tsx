@@ -101,7 +101,7 @@ export default async function GamesPage() {
         {[
           ["🎯", "Stages to clear", "Every game starts easy. Clear a stage to unlock the next, all the way to the hardest."],
           ["⚡", "Play people online", `Press Play online in any game to get matched in seconds.${total > 0 ? ` ${total} playing right now.` : ""}`],
-          ["🏆", "Climb the leaderboards", "Best scores and wins go on the leaderboard, and some tournaments award gift cards."],
+          ["🏆", "Weekly leaderboards", "Play every level of a game against the clock and top the week's board."],
         ].map(([icon, title, text]) => (
           <div key={title} className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-4">
             <p className="text-2xl" aria-hidden>{icon}</p>

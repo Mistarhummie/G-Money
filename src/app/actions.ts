@@ -17,6 +17,7 @@ import * as shop from "@/lib/shop/orders";
 import { getSupplier } from "@/lib/shop/suppliers";
 import { orders } from "@/db/schema";
 import { joinWithUsername } from "@/lib/wallet";
+import * as weekly from "@/lib/weekly";
 
 export type ActionState = { error?: string; message?: string; devCode?: string; phone?: string } | undefined;
 
@@ -193,11 +194,12 @@ export async function startGameAction(
   stage: number,
   tournamentId: string | null,
   challengeId: string | null = null,
+  runId: string | null = null,
 ): Promise<{ sessionId: string; seed: number; stage: number } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };
   try {
-    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId, challengeId });
+    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId, challengeId, runId });
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
@@ -209,6 +211,34 @@ export async function submitGameAction(sessionId: string, input: string): Promis
   if (!user) return { error: "Sign in to play" };
   try {
     return await arcade.submitSession(await getDb(), user, sessionId, input);
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------- weekly leaderboards
+
+export async function startRunAction(game: string): Promise<{ runId: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    const r = await weekly.startRun(await getDb(), user, game);
+    revalidatePath(`/leaderboards/${game}`);
+    return { runId: r.id };
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+export async function giveUpRunAction(runId: string, game: string): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    await weekly.giveUpRun(await getDb(), user, runId);
+    revalidatePath(`/leaderboards/${game}`);
+    return { ok: true };
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;

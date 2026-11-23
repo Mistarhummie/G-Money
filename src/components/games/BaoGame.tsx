@@ -12,7 +12,7 @@ import { useTweened } from "./fx/motion";
  */
 type Phase = "idle" | "mine" | "thinking" | "theirs";
 
-export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
+export default function BaoGame({ seed, stage, onFinish, timeUp }: GameComponentProps) {
   const [moves, setMoves] = useState<Move[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [mineSow, setMineSow] = useState<Sowing | null>(null);
@@ -64,6 +64,11 @@ export default function BaoGame({ seed, stage, onFinish }: GameComponentProps) {
     finished.current = true;
     onFinish(input);
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) giveUp();
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Seed totals (pits + store) glide to their new values once a sowing has played out.
   const counted = sowing ? sowing.from : game.state;

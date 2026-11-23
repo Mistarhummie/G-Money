@@ -56,6 +56,19 @@ export default async function PlayGamePage({
         {t && <p className="mt-1 text-sm text-amber-200">Tournament attempt: you get {t.attemptsPerPlayer} attempts and your best one counts.</p>}
       </div>
 
+      {!t && (
+        <Link
+          href={`/leaderboards/${key}`}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300/25 bg-gradient-to-r from-amber-400/15 via-brand-violet/10 to-mint/10 p-3 text-sm transition hover:border-amber-300/50"
+        >
+          <span>
+            <strong className="text-amber-200">🏆 Weekly leaderboard</strong>
+            <span className="block text-white/70">Play every level against the clock{config.paidEntryEnabled() ? " for a share of this week's prize pool" : ""}.</span>
+          </span>
+          <span className="shrink-0 font-semibold text-mint">Play →</span>
+        </Link>
+      )}
+
       {activity && (
         <PlayOnline
           game={key}

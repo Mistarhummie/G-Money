@@ -10,7 +10,7 @@ import { vibrate } from "./fx/motion";
 const THINK_MS = 250;
 const HOVER_MS = 320;
 
-export default function Connect4Game({ seed, stage, onFinish }: GameComponentProps) {
+export default function Connect4Game({ seed, stage, onFinish, timeUp }: GameComponentProps) {
   // The game object is mutable and only touched in event handlers; `view` drives rendering.
   const [game] = useState(() => newGame(seed, stage));
   const [view, setView] = useState(() => viewOf(game));
@@ -33,6 +33,11 @@ export default function Connect4Game({ seed, stage, onFinish }: GameComponentPro
     if (delay) later(delay, () => onFinish(all));
     else onFinish(all);
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish(input);
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function drop(col: number) {
     if (game.turn !== 1 || !canPlay(game, col) || finished.current) return;
