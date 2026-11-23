@@ -4,6 +4,8 @@ import { getDb } from "@/db";
 import { config } from "@/lib/config";
 import { requireUser } from "@/lib/session";
 import { accountBalance, ensureTestFunds, walletHistory, walletOf } from "@/lib/wallet";
+import { walletPaymentsOn } from "@/lib/wallet-payments";
+import Link from "next/link";
 import { updateProfileAction } from "../actions";
 
 export default async function ProfilePage() {
@@ -14,6 +16,7 @@ export default async function ProfilePage() {
   const testFunds = config.testFunds();
   const history = testFunds ? await walletHistory(db, user.id) : [];
   const testAccount = user.phone.startsWith("test:");
+  const walletOn = walletPaymentsOn();
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-4">
       <h1 className="text-2xl font-bold">Your profile</h1>
@@ -26,7 +29,15 @@ export default async function ProfilePage() {
             <h2 className="font-semibold">Test funds</h2>
             <span className="text-2xl font-bold text-amber-200">{kes(owed)}</span>
           </div>
-          <p className="text-xs text-white/50">Play money for testing. It can&apos;t be paid in or taken out.</p>
+          <p className="text-xs text-white/50">
+            Play money for testing. It can&apos;t be paid in or taken out for real.
+            {walletOn && (
+              <>
+                {" "}
+                <Link href="/wallet" className="text-mint underline">Try test top-ups and withdrawals</Link>
+              </>
+            )}
+          </p>
           {history.length > 0 && (
             <ul className="flex flex-col gap-0.5 text-sm">
               {history.map((h, i) => (
@@ -45,7 +56,7 @@ export default async function ProfilePage() {
       <Card className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-white/80">
         {!testAccount && <span>Phone: {user.phone}</span>}
         <span>Matches played: {user.matchesPlayed}</span>
-        {!testFunds && <span>Prize balance: {kes(owed)}</span>}
+        {!testFunds && (walletOn ? <Link href="/wallet" className="text-mint">Wallet: {kes(owed)}</Link> : <span>Prize balance: {kes(owed)}</span>)}
       </Card>
       <Card>
         <ActionForm action={updateProfileAction} submitLabel="Save profile">
@@ -68,7 +79,7 @@ export default async function ProfilePage() {
         </ActionForm>
       </Card>
       <p className={testAccount ? "hidden" : "text-xs text-white/50"}>
-        Prizes are sent to the M-Pesa number on your account. Game IDs must be your own: sharing accounts gets you suspended.
+        {walletOn ? "Prizes go into your wallet, and you can withdraw them to your M-Pesa." : "Prizes are sent to the M-Pesa number on your account."} Game IDs must be your own: sharing accounts gets you suspended.
       </p>
     </div>
   );
