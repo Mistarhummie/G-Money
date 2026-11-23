@@ -57,6 +57,13 @@
       "when": 1794985975929,
       "tag": "0007_stakes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795435626556,
+      "tag": "0009_wallet_payments",
+      "breakpoints": true
     }
   ]
 }

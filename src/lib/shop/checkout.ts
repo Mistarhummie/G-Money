@@ -2,8 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { orders, type Order, type User } from "@/db/schema";
 import { UserError } from "../errors";
-import * as mpesa from "../payments/mpesa";
-import * as paystack from "../payments/paystack";
+import * as intasend from "../payments/intasend";
 import { fulfilOrder, markPaid, markPaymentFailed, setPaymentRef } from "./orders";
 import { getSupplier } from "./suppliers";
 
@@ -17,30 +16,55 @@ export function paymentsSimulated(): boolean {
 }
 
 export function methodsAvailable(): { mpesa: boolean; card: boolean } {
-  const sim = paymentsSimulated();
-  return { mpesa: sim || mpesa.mpesaConfigured(), card: sim || paystack.paystackConfigured() };
+  const on = paymentsSimulated() || intasend.intasendConfigured();
+  return { mpesa: on, card: on };
 }
 
-/** Starts payment for a new order. Card payments return the Paystack page to send the buyer to. */
+/** IntaSend's api_ref for a shop order. Webhooks carry it back so we know which order was paid. */
+export const orderRef = (orderId: string) => `order-${orderId}`;
+
+/** Starts payment for a new order. Card payments return IntaSend's card page to send the buyer to. */
 export async function startPayment(db: Db, order: Order, user: User): Promise<{ redirectUrl?: string }> {
   if (paymentsSimulated()) {
     await setPaymentRef(db, order.id, `SIM-${order.id}`);
     return {};
   }
+  if (!intasend.intasendConfigured()) throw new UserError("Payments are not set up yet");
   if (order.method === "mpesa") {
-    if (!mpesa.mpesaConfigured()) throw new UserError("M-Pesa payments are not set up yet");
-    const checkoutId = await mpesa.startStkPush({ phone: user.phone, amountKes: order.totalKes, reference: order.id.slice(0, 12) });
-    await setPaymentRef(db, order.id, checkoutId);
+    if (user.phone.startsWith("test:")) throw new UserError("Sign in with your phone number to pay with M-Pesa");
+    const invoiceId = await intasend.stkPush({ phone: user.phone, amountKes: order.totalKes, apiRef: orderRef(order.id), narrative: "G-Money gift card" });
+    await setPaymentRef(db, order.id, invoiceId);
     return {};
   }
   if (order.method === "card") {
-    if (!paystack.paystackConfigured()) throw new UserError("Card payments are not set up yet");
-    const reference = `GM-${order.id}`;
-    await setPaymentRef(db, order.id, reference);
-    const url = await paystack.startCardPayment({ email: order.payerEmail!, amountKes: order.totalKes, reference, orderId: order.id });
+    const { url, checkoutId } = await intasend.cardCheckout({
+      email: order.payerEmail!,
+      amountKes: order.totalKes,
+      apiRef: orderRef(order.id),
+      redirectPath: `/orders/${order.id}`,
+    });
+    // Replaced by the invoice id once IntaSend reports the payment.
+    await setPaymentRef(db, order.id, `checkout:${checkoutId}`);
     return { redirectUrl: url };
   }
   throw new UserError("Unknown payment method");
+}
+
+/**
+ * Applies IntaSend's answer about an order's payment. The result must come from IntaSend's status check,
+ * never straight from a webhook body, and its api_ref must name this order.
+ */
+export async function applyOrderPayment(db: Db, orderId: string, r: intasend.CollectionResult): Promise<void> {
+  if (r.apiRef !== orderRef(orderId)) return;
+  if (r.status === "paid") {
+    if (r.currency !== "KES") return markPaymentFailed(db, { orderId }, `Paid in ${r.currency}, expected KES`);
+    await setPaymentRef(db, orderId, r.invoiceId);
+    await paymentSucceeded(db, { orderId }, { amountKes: r.amountKes, receipt: r.receipt });
+  } else if (r.status === "failed") {
+    await markPaymentFailed(db, { orderId }, r.reason);
+  } else {
+    await setPaymentRef(db, orderId, r.invoiceId);
+  }
 }
 
 /** Records a confirmed payment and, when nothing needs checking, buys the card straight away. */
@@ -55,22 +79,15 @@ export async function paymentSucceeded(
   return res.order;
 }
 
-/** Asks the payment provider directly, for when a callback is slow or lost. */
-export async function refreshPayment(db: Db, order: Order): Promise<void> {
-  if (order.status !== "pending_payment" || !order.paymentRef || paymentsSimulated()) return;
-  if (order.method === "mpesa" && mpesa.mpesaConfigured()) {
-    const r = await mpesa.queryStkPush(order.paymentRef);
-    if (r.status === "paid") await paymentSucceeded(db, { orderId: order.id }, { receipt: r.receipt || undefined });
-    if (r.status === "failed") await markPaymentFailed(db, { orderId: order.id }, r.reason);
-  }
-  if (order.method === "card" && paystack.paystackConfigured()) {
-    const r = await paystack.verifyCardPayment(order.paymentRef);
-    if (r.status === "paid") {
-      if (r.currency !== "KES") await markPaymentFailed(db, { orderId: order.id }, `Paid in ${r.currency}, expected KES`);
-      else await paymentSucceeded(db, { orderId: order.id }, { amountKes: r.amountKes, receipt: order.paymentRef });
-    }
-    if (r.status === "failed") await markPaymentFailed(db, { orderId: order.id }, r.reason);
-  }
+/**
+ * Asks IntaSend directly, for when a webhook is slow or lost. invoiceHint is the id IntaSend adds to the
+ * address when a card buyer comes back; it is trusted only if IntaSend says it belongs to this order.
+ */
+export async function refreshPayment(db: Db, order: Order, invoiceHint?: string): Promise<void> {
+  if (order.status !== "pending_payment" || paymentsSimulated() || !intasend.intasendConfigured()) return;
+  const invoiceId = order.paymentRef && !order.paymentRef.startsWith("checkout:") ? order.paymentRef : invoiceHint;
+  if (!invoiceId) return;
+  await applyOrderPayment(db, order.id, await intasend.paymentStatus(invoiceId));
 }
 
 /** Test sites only: the buyer presses "pay" or "fail" instead of using M-Pesa or a card. */

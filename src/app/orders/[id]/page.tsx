@@ -14,16 +14,24 @@ import { AutoRefresh, CopyButton } from "./client";
 
 const WAITING = ["pending_payment", "paid", "fulfilling"];
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tracking_id?: string; invoice_id?: string }>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
   const user = await requireUser();
   const db = await getDb();
   const load = async () => (await db.select({ o: orders, p: products }).from(orders).innerJoin(products, eq(products.id, orders.productId)).where(eq(orders.id, id)))[0];
   let row = await load();
   if (!row || row.o.userId !== user.id) notFound();
-  // Coming back from the card payment page: confirm with Paystack straight away.
-  if (row.o.method === "card" && row.o.status === "pending_payment") {
-    await refreshPayment(db, row.o).catch(() => undefined);
+  // Coming back from IntaSend's card page: confirm with IntaSend straight away. The id in the address is
+  // only a hint; IntaSend must say it belongs to this order.
+  if (row.o.status === "pending_payment") {
+    await refreshPayment(db, row.o, query.tracking_id || query.invoice_id).catch(() => undefined);
     row = await load();
   }
   const { o: order, p: product } = row;

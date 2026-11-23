@@ -8,6 +8,7 @@ import { getDb } from "@/db";
 import { needsMe } from "@/lib/challenges";
 import { config } from "@/lib/config";
 import { accountBalance, ensureTestFunds, walletOf } from "@/lib/wallet";
+import { walletPaymentsOn } from "@/lib/wallet-payments";
 import { getCurrentUser } from "@/lib/session";
 import { signOutAction } from "./actions";
 import "./globals.css";
@@ -30,8 +31,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Challenges sent to you and matches waiting on your move. Checked on page loads only; never breaks the page.
   const waiting = user ? await getDb().then((db) => needsMe(db, user)).catch(() => null) : null;
   const testFunds = config.testFunds();
+  const walletOn = walletPaymentsOn();
   const balance =
-    user && testFunds
+    user && (testFunds || walletOn)
       ? await getDb()
           .then(async (db) => {
             // Accounts that signed in with a phone (like the admin's) get their test funds on their first visit.
@@ -66,9 +68,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {user?.isAdmin && <NavLink href="/admin" className="nav-link !text-lilac">Admin</NavLink>}
             {balance != null && (
               <Link
-                href="/profile"
+                href={walletOn ? "/wallet" : "/profile"}
                 className="rounded-full border border-mint/40 bg-mint/10 px-2.5 py-0.5 font-display text-xs font-extrabold text-mint transition hover:bg-mint/20"
-                title="Test funds: not real money"
+                title={testFunds ? "Test funds: not real money" : "Your wallet"}
               >
                 KES {balance.toLocaleString()}
               </Link>
