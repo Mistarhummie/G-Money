@@ -501,3 +501,74 @@ export type Challenge = typeof challenges.$inferSelect;
 export type LudoGame = typeof ludoGames.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
+
+// ---------------------------------------------------------------- wallet money in and out (IntaSend)
+
+export type DepositStatus =
+  | "pending" // waiting for the M-Pesa PIN or card payment
+  | "credited" // paid and added to the wallet
+  | "held" // paid, but something looked wrong (e.g. less than asked); the admin decides
+  | "failed" // not paid
+  | "refunded"; // a held payment the admin sent back
+
+export const walletDeposits = pgTable(
+  "wallet_deposits",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    method: text("method").$type<"mpesa" | "card">().notNull(),
+    // What goes into the wallet. Card top-ups also pay feeKes; totalKes is what the payer is charged.
+    amountKes: integer("amount_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    totalKes: integer("total_kes").notNull(),
+    status: text("status").$type<DepositStatus>().notNull().default("pending"),
+    invoiceId: text("invoice_id"),
+    checkoutId: text("checkout_id"),
+    payerEmail: text("payer_email"),
+    receipt: text("receipt"),
+    note: text("note"),
+    createdAt: createdAt(),
+    creditedAt: timestamp("credited_at", { withTimezone: true }),
+  },
+  (t) => [index("wallet_deposits_user_idx").on(t.userId, t.createdAt), uniqueIndex("wallet_deposits_invoice_idx").on(t.invoiceId)],
+);
+
+export type WithdrawalStatus =
+  | "requested" // money set aside from the wallet, waiting for the admin
+  | "sending" // sent to IntaSend, waiting for M-Pesa
+  | "paid"
+  | "failed" // M-Pesa refused; money returned to the wallet
+  | "rejected" // admin refused; money returned to the wallet
+  | "needs_check"; // IntaSend's answer was unclear; the admin checks before anything else
+
+export const withdrawals = pgTable(
+  "withdrawals",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    // amountKes reaches the player's M-Pesa; feeKes is kept to cover the payout charge.
+    amountKes: integer("amount_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    phone: text("phone").notNull(),
+    status: text("status").$type<WithdrawalStatus>().notNull().default("requested"),
+    trackingId: text("tracking_id"),
+    receipt: text("receipt"),
+    note: text("note"),
+    reviewedBy: text("reviewed_by").references(() => users.id),
+    createdAt: createdAt(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("withdrawals_user_idx").on(t.userId, t.createdAt),
+    index("withdrawals_status_idx").on(t.status),
+    uniqueIndex("withdrawals_tracking_idx").on(t.trackingId),
+  ],
+);
+
+export type WalletDeposit = typeof walletDeposits.$inferSelect;
+export type Withdrawal = typeof withdrawals.$inferSelect;

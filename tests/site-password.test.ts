@@ -52,6 +52,6 @@ describe("test-site password", () => {
     const basic = await proxy(req("/", { headers: { authorization: `Basic ${btoa("any:secret123")}` } }));
     expect(basic.headers.get("x-middleware-next")).toBe("1");
     expect((await proxy(req("/api/challenges/1"))).status).toBe(401);
-    expect((await proxy(req("/api/payments/mpesa", { method: "POST" }))).headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(req("/api/payments/intasend", { method: "POST" }))).headers.get("x-middleware-next")).toBe("1");
   });
 });

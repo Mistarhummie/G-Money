@@ -9,8 +9,11 @@ import { formatFace } from "@/lib/shop/pricing";
 import { config } from "@/lib/config";
 import { requireAdmin } from "@/lib/session";
 import { prizesOwed } from "@/lib/tournaments";
+import { walletAttention, walletPaymentsOn } from "@/lib/wallet-payments";
 import {
+  adminDepositAction,
   adminTournamentAction,
+  adminWithdrawalAction,
   banUserAction,
   createTournamentAction,
   recordPayoutAction,
@@ -45,8 +48,11 @@ export default async function AdminPage() {
     .from(tournaments)
     .where(inArray(tournaments.status, ["open", "running"]))
     .orderBy(tournaments.startsAt);
-  // Test funds are play money: nothing is owed to anyone on a test site.
-  const owed = config.testFunds() ? [] : await prizesOwed(db);
+  // Test funds are play money: nothing is owed to anyone on a test site. With wallet withdrawals on,
+  // players take prizes out themselves, so there is no hand-paid list.
+  const walletOn = walletPaymentsOn();
+  const owed = config.testFunds() || walletOn ? [] : await prizesOwed(db);
+  const money = walletOn ? await walletAttention(db) : { withdrawals: [], deposits: [] };
   const flagged = await db
     .select({ a: gameSessions, username: users.username })
     .from(gameSessions)
@@ -111,7 +117,74 @@ export default async function AdminPage() {
         ))}
       </section>
 
-      <section className="flex flex-col gap-3">
+      {walletOn && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-xl font-semibold">Withdrawals ({money.withdrawals.length})</h2>
+          <p className="text-sm text-white/60">
+            The money is already set aside from the player&apos;s wallet. Approve sends it to their M-Pesa through IntaSend; reject puts it back in their wallet.
+          </p>
+          {money.withdrawals.map(({ w, username }) => (
+            <Card key={w.id} className="flex flex-col gap-2">
+              <p className="text-sm">
+                <strong>{username ?? "?"}</strong> · {w.phone} · <span className="text-emerald-300">{kes(w.amountKes)}</span> (+{kes(w.feeKes)} fee) ·{" "}
+                {nairobiTime(w.createdAt)} · <StatusBadge status={w.status} />
+              </p>
+              {w.note && <p className="text-xs text-amber-200">{w.note}</p>}
+              {w.status === "requested" ? (
+                <div className="flex flex-wrap items-end gap-2">
+                  <ActionForm action={adminWithdrawalAction.bind(null, w.id, "approve")} submitLabel="Approve and send" confirmText={`Send ${kes(w.amountKes)} to ${w.phone}?`} />
+                  <ActionForm action={adminWithdrawalAction.bind(null, w.id, "reject")} submitLabel="Reject" buttonClassName="btn-danger" className="flex items-end gap-2">
+                    <label className="label">
+                      Reason (player sees it)
+                      <input name="reason" required className="input" />
+                    </label>
+                  </ActionForm>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-end gap-2">
+                  {w.trackingId && <ActionForm action={adminWithdrawalAction.bind(null, w.id, "check")} submitLabel="Ask IntaSend" buttonClassName="btn-secondary" />}
+                  <ActionForm action={adminWithdrawalAction.bind(null, w.id, "paid")} submitLabel="It was sent" buttonClassName="btn-secondary" className="flex items-end gap-2">
+                    <label className="label">
+                      M-Pesa code
+                      <input name="code" required className="input uppercase" />
+                    </label>
+                  </ActionForm>
+                  <ActionForm
+                    action={adminWithdrawalAction.bind(null, w.id, "failed")}
+                    submitLabel="It was not sent"
+                    buttonClassName="btn-danger"
+                    confirmText="Only if the IntaSend dashboard shows it did not go out. Return the money to the wallet?"
+                  />
+                </div>
+              )}
+            </Card>
+          ))}
+          {money.deposits.length > 0 && <h3 className="font-semibold">Top-ups to check ({money.deposits.length})</h3>}
+          {money.deposits.map(({ d, username }) => (
+            <Card key={d.id} className="flex flex-col gap-2">
+              <p className="text-sm">
+                <strong>{username ?? "?"}</strong> · {d.method === "mpesa" ? "M-Pesa" : "card"} {d.receipt} · asked {kes(d.totalKes)} · {d.note}
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <ActionForm action={adminDepositAction.bind(null, d.id, "credit")} submitLabel="Add to wallet" className="flex items-end gap-2">
+                  <label className="label">
+                    KES to add
+                    <input name="amountKes" type="number" min={1} defaultValue={d.amountKes} className="input" />
+                  </label>
+                </ActionForm>
+                <ActionForm action={adminDepositAction.bind(null, d.id, "refunded")} submitLabel="Mark refunded" buttonClassName="btn-secondary" className="flex items-end gap-2">
+                  <label className="label">
+                    How it was sent back
+                    <input name="note" required className="input" />
+                  </label>
+                </ActionForm>
+              </div>
+            </Card>
+          ))}
+        </section>
+      )}
+
+      <section className={walletOn ? "hidden" : "flex flex-col gap-3"}>
         <h2 className="text-xl font-semibold">Prizes to pay ({owed.length})</h2>
         <p className="text-sm text-white/60">Send each prize over M-Pesa, then record the transaction code here.</p>
         {owed.map((o) => (
