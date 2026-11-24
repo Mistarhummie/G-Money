@@ -6,7 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { giveUpRunAction, startGameAction, startRunAction, submitGameAction } from "@/app/actions";
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { HowToPlay } from "@/components/games/guide/HowToPlay";
-import { GAME_COMPONENTS } from "@/components/games/registry";
+import { aspectOf, GAME_COMPONENTS } from "@/components/games/registry";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
 
 type Props = {
@@ -144,7 +144,7 @@ export function RunPanel({ game, name, pvp, stages, kind, limits, fee, balance, 
       )}
 
       <GameFrame
-        aspect={game === "bao" ? 1.8 : 1}
+        aspect={aspectOf(game)}
         help={<HowToPlay game={game} name={name} stages={stages} pvp={pvp} />}
         toolbar={
           session ? (

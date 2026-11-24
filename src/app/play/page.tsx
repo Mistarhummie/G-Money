@@ -17,11 +17,15 @@ const POSTER_TITLE: Record<string, string> = {
   sudoku: "Sudoku",
   slide: "Slide 15",
   pool: "8-Ball",
+  penalty: "Penalties",
+  bricks: "Brick Blitz",
 };
 
-const BOARD = ["chessbot", "pool", "drafts", "bao", "connect4"];
+const BOARD = ["chessbot", "pool", "drafts", "bao", "connect4", "darts", "penalty"];
 /** Default "trending" order until real play counts take over. */
-const POPULAR = ["pool", "chessbot", "ludo", "snake", "connect4", "g2048", "bao", "drafts", "blocks", "sudoku", "slide"];
+const POPULAR = ["pool", "penalty", "bricks", "chessbot", "ludo", "sling", "darts", "snake", "connect4", "g2048", "bao", "drafts", "blocks", "sudoku", "slide"];
+
+const NEW = new Set(["bricks", "sling", "darts", "penalty"]);
 
 export default async function GamesPage() {
   // Who's online is nice to have: the hub still works if the database is slow to answer.
@@ -35,7 +39,7 @@ export default async function GamesPage() {
   const hot = new Set(trendingOrder.slice(0, 4));
 
   const item = (k: string): PosterItem => {
-    const badge = live(k) > 0 ? "LIVE" : k === "ludo" ? "NEW" : hot.has(k) ? "HOT" : undefined;
+    const badge = live(k) > 0 ? "LIVE" : NEW.has(k) ? "NEW" : hot.has(k) ? "HOT" : undefined;
     if (k === "ludo") {
       return { id: "game:ludo", href: "/play/ludo", art: "ludo", title: "Ludo", name: "Ludo", sub: "2–4 players · online", badge };
     }
@@ -66,7 +70,7 @@ export default async function GamesPage() {
               Line up the shot. <span className="text-gradient">Sink the 8.</span>
             </h1>
             <p className="mt-3 max-w-md text-white/80">
-              Eleven games we built ourselves. Clear a stage to unlock the next, play real people online, and climb the
+              Fifteen games we built ourselves. Clear a stage to unlock the next, play real people online, and climb the
               leaderboards.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3">

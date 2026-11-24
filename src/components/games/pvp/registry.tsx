@@ -13,4 +13,5 @@ export const PVP_COMPONENTS: Partial<Record<ArcadeKey, ComponentType<PvpBoardPro
   bao: dynamic(() => import("./BaoPvp"), { ssr: false, loading }),
   connect4: dynamic(() => import("./Connect4Pvp"), { ssr: false, loading }),
   pool: dynamic(() => import("./PoolPvp"), { ssr: false, loading }),
+  penalty: dynamic(() => import("./PenaltyPvp"), { ssr: false, loading }),
 };

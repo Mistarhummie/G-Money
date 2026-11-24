@@ -28,6 +28,10 @@ const LEVEL_MINUTES: Record<ArcadeKey, number[]> = {
   sudoku: [10, 15, 20, 25],
   // The sprint levels keep their own clocks (45 seconds and 2½ minutes).
   slide: [3, 0.75, 8, 2.5, 15],
+  bricks: [4, 5, 6, 7, 8],
+  sling: [3, 4, 4, 5, 6],
+  darts: [2, 2, 3, 3, 5],
+  penalty: [5, 5, 6, 6, 7],
 };
 
 export const levelLimitMs = (game: ArcadeKey, stage: number) => {

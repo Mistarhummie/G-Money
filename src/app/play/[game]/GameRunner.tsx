@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { startGameAction, submitGameAction } from "@/app/actions";
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { HowToPlay } from "@/components/games/guide/HowToPlay";
-import { GAME_COMPONENTS } from "@/components/games/registry";
+import { aspectOf, GAME_COMPONENTS } from "@/components/games/registry";
 import type { ArcadeKey, GameComponentProps, Stage } from "@/lib/games/arcade/types";
 
 type Props = {
@@ -128,7 +128,7 @@ export function GameRunner({
       </p>
 
       <GameFrame
-        aspect={game === "bao" ? 1.8 : 1}
+        aspect={aspectOf(game)}
         help={<HowToPlay game={game} name={name} stages={stages} pvp={pvp} />}
         toolbar={
           session ? (

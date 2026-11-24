@@ -4,7 +4,7 @@
  * Nothing the browser says about its own score is trusted.
  */
 
-export const ARCADE_KEYS = ["chessbot", "drafts", "bao", "connect4", "snake", "blocks", "g2048", "sudoku", "slide", "pool"] as const;
+export const ARCADE_KEYS = ["chessbot", "drafts", "bao", "connect4", "snake", "blocks", "g2048", "sudoku", "slide", "pool", "bricks", "sling", "darts", "penalty"] as const;
 export type ArcadeKey = (typeof ARCADE_KEYS)[number];
 
 export type Stage = {

@@ -13,6 +13,7 @@ import {
 import { GameFrame, useGameFx } from "@/components/games/fx/GameFx";
 import { HowToPlay } from "@/components/games/guide/HowToPlay";
 import { PVP_COMPONENTS } from "@/components/games/pvp/registry";
+import { aspectOf } from "@/components/games/registry";
 import type { ChallengeView } from "@/lib/challenges";
 import type { ArcadeKey, Stage } from "@/lib/games/arcade/types";
 import { GameRunner } from "@/app/play/[game]/GameRunner";
@@ -246,7 +247,7 @@ export function MatchClient({ initial, game, name, stages, ranking, scoreLabel, 
 
           {view.kind === "turns" && Board && (
             <GameFrame
-              aspect={game === "bao" ? 1.8 : 1}
+              aspect={aspectOf(game)}
               help={<HowToPlay game={game} name={name} stages={stages} pvp="turns" />}
               toolbar={
                 <span className={myTurn ? "text-sm font-semibold text-emerald-300" : "text-sm text-white/60"}>
