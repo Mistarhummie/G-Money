@@ -182,6 +182,10 @@ export const gameSessions = pgTable(
     tournamentId: text("tournament_id").references(() => tournaments.id),
     // Set for a head-to-head race between two players.
     challengeId: text("challenge_id"),
+    // Set for one level of a weekly leaderboard run.
+    runId: text("run_id"),
+    // Leaderboard points this level earned (runs only).
+    points: integer("points"),
     seed: bigint("seed", { mode: "number" }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -195,7 +199,57 @@ export const gameSessions = pgTable(
   (t) => [
     index("game_sessions_tournament_idx").on(t.tournamentId, t.userId),
     index("game_sessions_board_idx").on(t.game, t.stage, t.cleared),
+    index("game_sessions_run_idx").on(t.runId),
   ],
+);
+
+export type RunStatus = "active" | "finished";
+
+/**
+ * One paid go at a game's weekly leaderboard: every level in order, one session each. The run's points
+ * are the sum of its levels' points. It ends after the last level, or at the first level not cleared.
+ */
+export const leaderboardRuns = pgTable(
+  "leaderboard_runs",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    game: text("game").$type<ArcadeKey>().notNull(),
+    // Monday the week starts, Nairobi time, as YYYY-MM-DD.
+    week: text("week").notNull(),
+    feeKes: integer("fee_kes").notNull(),
+    // The level to play next (while active), 1-based.
+    stage: integer("stage").notNull().default(1),
+    points: integer("points").notNull().default(0),
+    timeMs: integer("time_ms").notNull().default(0),
+    status: text("status").$type<RunStatus>().notNull().default("active"),
+    // A level looked faster than a person can play: the run is kept out of the prizes until the admin clears it.
+    flagged: boolean("flagged").notNull().default(false),
+    detail: text("detail"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("leaderboard_runs_week_idx").on(t.game, t.week, t.status), index("leaderboard_runs_user_idx").on(t.userId, t.game, t.week)],
+);
+
+export type WeekWinner = { rank: number; userId: string; username: string | null; points: number; prizeKes: number };
+
+/** A finished week of one game's leaderboard, once its pool has been paid out. */
+export const leaderboardWeeks = pgTable(
+  "leaderboard_weeks",
+  {
+    game: text("game").$type<ArcadeKey>().notNull(),
+    week: text("week").notNull(),
+    grossKes: integer("gross_kes").notNull(),
+    platformFeeKes: integer("platform_fee_kes").notNull(),
+    poolKes: integer("pool_kes").notNull(),
+    players: integer("players").notNull(),
+    winners: jsonb("winners").$type<WeekWinner[]>().notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.game, t.week] })],
 );
 
 /** Each player's best result per game and stage. Clearing a stage unlocks the next one. */
@@ -447,3 +501,74 @@ export type Challenge = typeof challenges.$inferSelect;
 export type LudoGame = typeof ludoGames.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
+
+// ---------------------------------------------------------------- wallet money in and out (IntaSend)
+
+export type DepositStatus =
+  | "pending" // waiting for the M-Pesa PIN or card payment
+  | "credited" // paid and added to the wallet
+  | "held" // paid, but something looked wrong (e.g. less than asked); the admin decides
+  | "failed" // not paid
+  | "refunded"; // a held payment the admin sent back
+
+export const walletDeposits = pgTable(
+  "wallet_deposits",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    method: text("method").$type<"mpesa" | "card">().notNull(),
+    // What goes into the wallet. Card top-ups also pay feeKes; totalKes is what the payer is charged.
+    amountKes: integer("amount_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    totalKes: integer("total_kes").notNull(),
+    status: text("status").$type<DepositStatus>().notNull().default("pending"),
+    invoiceId: text("invoice_id"),
+    checkoutId: text("checkout_id"),
+    payerEmail: text("payer_email"),
+    receipt: text("receipt"),
+    note: text("note"),
+    createdAt: createdAt(),
+    creditedAt: timestamp("credited_at", { withTimezone: true }),
+  },
+  (t) => [index("wallet_deposits_user_idx").on(t.userId, t.createdAt), uniqueIndex("wallet_deposits_invoice_idx").on(t.invoiceId)],
+);
+
+export type WithdrawalStatus =
+  | "requested" // money set aside from the wallet, waiting for the admin
+  | "sending" // sent to IntaSend, waiting for M-Pesa
+  | "paid"
+  | "failed" // M-Pesa refused; money returned to the wallet
+  | "rejected" // admin refused; money returned to the wallet
+  | "needs_check"; // IntaSend's answer was unclear; the admin checks before anything else
+
+export const withdrawals = pgTable(
+  "withdrawals",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    // amountKes reaches the player's M-Pesa; feeKes is kept to cover the payout charge.
+    amountKes: integer("amount_kes").notNull(),
+    feeKes: integer("fee_kes").notNull().default(0),
+    phone: text("phone").notNull(),
+    status: text("status").$type<WithdrawalStatus>().notNull().default("requested"),
+    trackingId: text("tracking_id"),
+    receipt: text("receipt"),
+    note: text("note"),
+    reviewedBy: text("reviewed_by").references(() => users.id),
+    createdAt: createdAt(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("withdrawals_user_idx").on(t.userId, t.createdAt),
+    index("withdrawals_status_idx").on(t.status),
+    uniqueIndex("withdrawals_tracking_idx").on(t.trackingId),
+  ],
+);
+
+export type WalletDeposit = typeof walletDeposits.$inferSelect;
+export type Withdrawal = typeof withdrawals.$inferSelect;

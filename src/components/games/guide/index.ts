@@ -16,5 +16,9 @@ export const GUIDES: Record<GuideKey, () => Promise<{ default: Guide }>> = {
   sudoku: () => import("./sudoku"),
   slide: () => import("./slide"),
   pool: () => import("./pool"),
+  bricks: () => import("./bricks"),
+  sling: () => import("./sling"),
+  darts: () => import("./darts"),
+  penalty: () => import("./penalty"),
   ludo: () => import("./ludo"),
 };

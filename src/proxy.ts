@@ -16,7 +16,7 @@ export async function proxy(request: NextRequest) {
   const password = process.env.SITE_PASSWORD;
   if (!password) return NextResponse.next();
   const { pathname, searchParams } = request.nextUrl;
-  // Safaricom and Paystack cannot type the password; these routes check their own secrets.
+  // IntaSend cannot type the password; its webhook checks its own secret.
   if (pathname.startsWith("/api/payments/")) return NextResponse.next();
 
   const token = await siteToken(password);

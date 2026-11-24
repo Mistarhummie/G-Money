@@ -45,6 +45,20 @@ export const STAGES = [
   { name: "Level 5", goal: "Clear 30 lines at top speed", gravity: 5, target: 30 },
 ];
 
+/**
+ * The blocks fall faster the longer you play: every RAMP_TICKS (20 seconds) the drop interval shrinks
+ * by RAMP_FACTOR, down to MIN_GRAVITY ticks a row. Each stage starts from its own speed.
+ */
+export const RAMP_TICKS = 1250;
+export const RAMP_FACTOR = 0.85;
+export const MIN_GRAVITY = 2;
+export function gravityAt(stage: number, ticks: number): number {
+  const base = stageConfig(stage).gravity;
+  return Math.max(MIN_GRAVITY, Math.min(base, Math.round(base * RAMP_FACTOR ** Math.floor(ticks / RAMP_TICKS))));
+}
+/** 1 at the start, rising each time the blocks speed up. */
+export const speedLevel = (s: BlocksState) => Math.floor(s.ticks / RAMP_TICKS) + 1;
+
 export const stageConfig = (stage: number) => STAGES[Math.min(Math.max(stage, 1), STAGES.length) - 1];
 const stageNumber = (stage: number) => Math.min(Math.max(stage, 1), STAGES.length);
 
@@ -70,6 +84,8 @@ export type BlocksState = {
   lines: number;
   score: number;
   alive: boolean;
+  /** Ticks played so far; the speed-up is worked out from it. */
+  ticks: number;
 };
 
 /** Each bag is shuffled with its own RNG derived from the seed. */
@@ -116,6 +132,7 @@ export function newGame(seed: number, stage: number): BlocksState {
     lines: 0,
     score: 0,
     alive: true,
+    ticks: 0,
   };
   spawn(s);
   return s;
@@ -193,6 +210,8 @@ export function act(s: BlocksState, a: Action): boolean {
 /** One tick of time: gravity, then locking once the piece has rested long enough. */
 export function tick(s: BlocksState) {
   if (!s.alive) return;
+  s.ticks++;
+  if (s.ticks % RAMP_TICKS === 0) s.gravity = gravityAt(s.stage, s.ticks);
   const p = s.piece;
   if (fits(s.board, p.type, p.rot, p.x, p.y + 1)) {
     s.lock = 0;
@@ -237,8 +256,8 @@ function parseInput(input: string): { actions: TimedAction[]; end: number } | st
 export const blocks: ArcadeGame = {
   key: "blocks",
   name: "Block Stacker",
-  tagline: "Clear lines as the blocks fall faster.",
-  howToPlay: "Move and rotate the falling blocks to fill whole rows; full rows disappear and score points. Don't let the stack reach the top.",
+  tagline: "Clear lines as the blocks fall faster and faster.",
+  howToPlay: "Move and rotate the falling blocks to fill whole rows; full rows disappear and score points. The blocks speed up every 20 seconds, so keep going as long as you can. Don't let the stack reach the top.",
   kind: "solo",
   ranking: "score",
   scoreLabel: "points",

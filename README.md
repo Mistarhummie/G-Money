@@ -9,7 +9,8 @@ The planning documents (fair play, money model, competitor review) live in the p
 ### Gift card shop (the home page)
 
 - **Catalog** loaded from the supplier. New cards stay hidden until the admin puts them on sale. Prices are the supplier's dollar cost × the admin's dollar rate + 5% markup, rounded up to the next KES 10. Card buyers pay the card fee on top.
-- **Checkout** with M-Pesa (STK push to the buyer's phone) or card (Paystack, with the bank's 3-D Secure check).
+- **Checkout** through IntaSend: M-Pesa (STK push to the buyer's phone) or card (IntaSend's card page, with the bank's 3-D Secure check).
+- **Wallet** (`/wallet`): top up with M-Pesa or card and withdraw to M-Pesa through IntaSend. Prizes are paid into the wallet. Withdrawals wait for the admin (Admin → Withdrawals) unless under `WITHDRAW_AUTO_MAX_KES`. Only open when `PAID_ENTRY_ENABLED=true`, never on a `TEST_FUNDS` site (except simulated).
 - **Delivery**: once payment is confirmed the card is bought from the supplier and the code is shown on the order page and kept in **My orders**. Codes are stored encrypted (`CODE_ENCRYPTION_KEY`).
 - **Safety**:
   - A repeated payment callback can never buy the same card twice.
@@ -67,7 +68,16 @@ npx tsc --noEmit
 5. **Deployments → Redeploy**. Database tables are created automatically on first use.
 6. Sign in with the admin number, open **Admin → Shop admin**, set the dollar rate, press **Load cards from supplier** and put some cards on sale.
 
-For a real launch, turn `OTP_DEV_MODE` off, add the Africa's Talking SMS settings, remove `SITE_PASSWORD` and `PAYMENTS_MODE`, and add the Reloadly, M-Pesa and Paystack settings from `.env.example`.
+For a real launch, turn `OTP_DEV_MODE` off, add the Africa's Talking SMS settings, remove `SITE_PASSWORD` and `PAYMENTS_MODE`, and add the Reloadly and IntaSend settings from `.env.example`.
+
+### IntaSend setup
+
+1. Make an account at https://sandbox.intasend.com (test) and later https://intasend.com (live, needs ID verification).
+2. Copy the publishable and secret keys into `INTASEND_PUBLISHABLE_KEY` and `INTASEND_SECRET_KEY`.
+3. Pick a long random word for `INTASEND_WEBHOOK_CHALLENGE`. On the IntaSend dashboard add a webhook to `PUBLIC_BASE_URL/api/payments/intasend` with that word as the challenge.
+4. For live money set `INTASEND_ENV=live` with the live keys. Keep enough money in the IntaSend wallet to cover withdrawals.
+
+Every webhook is checked with IntaSend's status API before money moves, so a forged webhook can't credit anyone.
 
 After changing `src/db/schema.ts`, generate a migration with `npm run db:generate`.
 

@@ -23,7 +23,7 @@ const rowDone = (b: Board, size: number, r: number) => Array.from({ length: size
 const colDone = (b: Board, size: number, c: number) =>
   Array.from({ length: size }, (_, r) => r * size + c).every((i) => i === size * size - 1 || b[i] === i + 1);
 
-export default function SlideGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
+export default function SlideGame({ seed, stage, onFinish, onProgress, timeUp }: GameComponentProps) {
   const { size, seconds } = stageConfig(stage);
   const fx = useGameFx();
   const start = useMemo(() => boardFromSeed(seed, size), [seed, size]);
@@ -43,6 +43,17 @@ export default function SlideGame({ seed, stage, onFinish, onProgress }: GameCom
     lastPop.current = now;
     fx.pop(text, opts);
     return true;
+  }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) giveUp();
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function giveUp() {
+    if (done) return;
+    setGaveUp(true);
+    onFinish(moves);
   }
 
   function play(move: Move | null) {
@@ -129,10 +140,7 @@ export default function SlideGame({ seed, stage, onFinish, onProgress }: GameCom
         <button
           type="button"
           className="underline"
-          onClick={() => {
-            setGaveUp(true);
-            onFinish(moves);
-          }}
+          onClick={giveUp}
           disabled={done}
         >
           Give up

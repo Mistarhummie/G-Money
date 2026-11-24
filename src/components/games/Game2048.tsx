@@ -20,7 +20,7 @@ const SESSION_MS = 30 * 60 * 1000;
 
 type Game = { state: State; moves: string; tiles: Tile[]; gained: number };
 
-export default function Game2048({ seed, stage, onFinish, onProgress }: GameComponentProps) {
+export default function Game2048({ seed, stage, onFinish, onProgress, timeUp }: GameComponentProps) {
   const { target } = stageConfig(stage);
   const [game, setGame] = useState<Game>(() => {
     const state = newGame(seed);
@@ -55,6 +55,11 @@ export default function Game2048({ seed, stage, onFinish, onProgress }: GameComp
     setDone(true);
     onFinish(live.current.moves);
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish();
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function play(dir: Dir) {
     if (ended.current) return;

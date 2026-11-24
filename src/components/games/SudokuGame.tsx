@@ -29,7 +29,7 @@ const complete = (grid: number[], cells: number[]) => new Set(cells.map((j) => g
 
 type Sweep = { id: number; unit: Unit; delays: Map<number, number> };
 
-export default function SudokuGame({ seed, stage, onFinish, onProgress }: GameComponentProps) {
+export default function SudokuGame({ seed, stage, onFinish, onProgress, timeUp }: GameComponentProps) {
   const fx = useGameFx();
   const { givens, solution } = useMemo(() => puzzleFromSeed(seed, stage), [seed, stage]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -62,6 +62,11 @@ export default function SudokuGame({ seed, stage, onFinish, onProgress }: GameCo
     finished.current = true;
     onFinish(formatEntries(list));
   }
+
+  // A leaderboard level's timer ran out: hand in the game as it stands.
+  useEffect(() => {
+    if (timeUp) finish(entries);
+  }, [timeUp]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function say(text: string, opts: Parameters<typeof fx.pop>[1]) {
     const now = performance.now();

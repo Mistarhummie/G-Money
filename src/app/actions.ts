@@ -17,6 +17,9 @@ import * as shop from "@/lib/shop/orders";
 import { getSupplier } from "@/lib/shop/suppliers";
 import { orders } from "@/db/schema";
 import { joinWithUsername } from "@/lib/wallet";
+import * as weekly from "@/lib/weekly";
+import * as money from "@/lib/wallet-payments";
+import { walletDeposits } from "@/db/schema";
 
 export type ActionState = { error?: string; message?: string; devCode?: string; phone?: string } | undefined;
 
@@ -193,11 +196,12 @@ export async function startGameAction(
   stage: number,
   tournamentId: string | null,
   challengeId: string | null = null,
+  runId: string | null = null,
 ): Promise<{ sessionId: string; seed: number; stage: number } | { error: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in to play" };
   try {
-    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId, challengeId });
+    return await arcade.startSession(await getDb(), user, { game, stage, tournamentId, challengeId, runId });
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
@@ -209,6 +213,34 @@ export async function submitGameAction(sessionId: string, input: string): Promis
   if (!user) return { error: "Sign in to play" };
   try {
     return await arcade.submitSession(await getDb(), user, sessionId, input);
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------- weekly leaderboards
+
+export async function startRunAction(game: string): Promise<{ runId: string } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    const r = await weekly.startRun(await getDb(), user, game);
+    revalidatePath(`/leaderboards/${game}`);
+    return { runId: r.id };
+  } catch (err) {
+    if (err instanceof UserError) return { error: err.message };
+    throw err;
+  }
+}
+
+export async function giveUpRunAction(runId: string, game: string): Promise<{ ok: true } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in to play" };
+  try {
+    await weekly.giveUpRun(await getDb(), user, runId);
+    revalidatePath(`/leaderboards/${game}`);
+    return { ok: true };
   } catch (err) {
     if (err instanceof UserError) return { error: err.message };
     throw err;
@@ -510,5 +542,105 @@ export async function refundOrderAction(orderId: string, _: ActionState, form: F
     await shop.markRefunded(await getDb(), admin, orderId, str(form, "note"));
     revalidatePath("/admin/shop");
     return { message: "Marked as refunded" };
+  });
+}
+
+// ---------------------------------------------------------------- wallet top-ups and withdrawals
+
+export async function topUpAction(_: ActionState, form: FormData): Promise<ActionState> {
+  let target = "";
+  const result = await run(async () => {
+    const user = await getCurrentUser();
+    if (!user) redirect("/login?next=/wallet");
+    const db = await getDb();
+    const method = str(form, "method") === "card" ? "card" : "mpesa";
+    const dep = await money.createDeposit(db, user, { amountKes: Number(str(form, "amountKes")), method, email: str(form, "email") });
+    const { redirectUrl } = await money.startDeposit(db, dep, user);
+    target = redirectUrl ?? `/wallet?deposit=${dep.id}`;
+  });
+  if (result?.error) return result;
+  redirect(target);
+}
+
+async function ownDeposit(depositId: string) {
+  const user = await requireUser();
+  const db = await getDb();
+  const [dep] = await db.select().from(walletDeposits).where(eq(walletDeposits.id, depositId));
+  if (!dep || dep.userId !== user.id) throw new UserError("Top-up not found");
+  return { user, db, dep };
+}
+
+export async function checkDepositAction(depositId: string): Promise<ActionState> {
+  return run(async () => {
+    const { db, dep } = await ownDeposit(depositId);
+    await money.refreshDeposit(db, dep);
+    revalidatePath("/wallet");
+    return { message: "Checked" };
+  });
+}
+
+export async function cancelDepositAction(depositId: string): Promise<ActionState> {
+  return run(async () => {
+    const { db, user } = await ownDeposit(depositId);
+    await money.cancelDeposit(db, user, depositId);
+    revalidatePath("/wallet");
+    return { message: "Top-up cancelled" };
+  });
+}
+
+export async function simulateDepositAction(depositId: string, outcome: "paid" | "failed"): Promise<ActionState> {
+  return run(async () => {
+    const user = await requireUser();
+    await money.simulateDeposit(await getDb(), user, depositId, outcome);
+    revalidatePath("/", "layout");
+    return { message: outcome === "paid" ? "Test top-up paid" : "Test top-up declined" };
+  });
+}
+
+export async function withdrawAction(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const user = await requireUser();
+    const w = await money.requestWithdrawal(await getDb(), user, { amountKes: Number(str(form, "amountKes")), phone: str(form, "phone") });
+    revalidatePath("/", "layout");
+    if (w.status === "paid") return { message: `Sent KES ${w.amountKes.toLocaleString("en-KE")} to ${w.phone}` };
+    if (w.status === "sending") return { message: "Sending to your M-Pesa now" };
+    if (w.status === "failed") return { error: "M-Pesa did not accept the payout. The money is back in your wallet." };
+    return { message: "Withdrawal requested. It is checked and sent to your M-Pesa, usually the same day." };
+  });
+}
+
+export async function adminWithdrawalAction(
+  withdrawalId: string,
+  op: "approve" | "reject" | "check" | "paid" | "failed",
+  _: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    const db = await getDb();
+    let message = "Done";
+    if (op === "approve") {
+      const w = await money.approveWithdrawal(db, admin, withdrawalId);
+      message = w.status === "paid" ? "Sent" : w.status === "failed" ? `Not sent: ${w.note}` : w.status === "needs_check" ? `Unclear: ${w.note}` : "Sent to IntaSend";
+    } else if (op === "reject") {
+      await money.rejectWithdrawal(db, admin, withdrawalId, str(form, "reason"));
+      message = "Rejected; money returned to the wallet";
+    } else {
+      const w = await money.resolveWithdrawal(db, admin, withdrawalId, op, str(form, "code"));
+      message = `Now ${w.status}`;
+    }
+    revalidatePath("/admin");
+    return { message };
+  });
+}
+
+export async function adminDepositAction(depositId: string, op: "credit" | "refunded", _: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const admin = await requireAdmin();
+    const db = await getDb();
+    if (op === "credit") await money.creditHeldDeposit(db, admin, depositId, Number(str(form, "amountKes")));
+    else await money.markDepositRefunded(db, admin, depositId, str(form, "note"));
+    revalidatePath("/admin");
+    return { message: op === "credit" ? "Added to the wallet" : "Marked refunded" };
   });
 }

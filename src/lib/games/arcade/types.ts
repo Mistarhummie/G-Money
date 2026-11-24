@@ -4,7 +4,7 @@
  * Nothing the browser says about its own score is trusted.
  */
 
-export const ARCADE_KEYS = ["chessbot", "drafts", "bao", "connect4", "snake", "blocks", "g2048", "sudoku", "slide", "pool"] as const;
+export const ARCADE_KEYS = ["chessbot", "drafts", "bao", "connect4", "snake", "blocks", "g2048", "sudoku", "slide", "pool", "bricks", "sling", "darts", "penalty"] as const;
 export type ArcadeKey = (typeof ARCADE_KEYS)[number];
 
 export type Stage = {
@@ -58,6 +58,8 @@ export type GameComponentProps = {
    * Games may call it on every change: the runner throttles what it sends.
    */
   onProgress?: (p: { score: number; detail?: string }) => void;
+  /** Set once a timed level's clock runs out: the game hands itself in as it stands (like giving up). */
+  timeUp?: boolean;
 };
 
 export const invalid = (detail: string): Verdict => ({ valid: false, cleared: false, score: 0, flagged: false, detail });

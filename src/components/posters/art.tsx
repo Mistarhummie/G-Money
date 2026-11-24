@@ -374,6 +374,116 @@ const Trophy: Art = () => (
   </svg>
 );
 
+
+const Bricks: Art = () => {
+  const colors = ["#f43f5e", "#f59e0b", "#22d3a6", "#38bdf8", "#a78bfa"];
+  return (
+    <svg viewBox="0 0 200 200" aria-hidden>
+      {colors.map((c, r) =>
+        [0, 1, 2, 3, 4].map((col) =>
+          (r === 2 && col === 2) || (r === 3 && col === 1) ? null : (
+            <g key={`${r}-${col}`}>
+              <rect x={22 + col * 32} y={30 + r * 16} width="28" height="12" rx="3" fill={c} />
+              <rect x={24 + col * 32} y={31.5 + r * 16} width="24" height="3" rx="1.5" fill="#fff" fillOpacity="0.35" />
+            </g>
+          ),
+        ),
+      )}
+      {/* Shards from the brick that just broke */}
+      <path d="M92 70 l-8 -6 M104 72 l6 -8 M98 64 l0 -9" stroke="#fde68a" strokeWidth="3" strokeLinecap="round" />
+      {/* Ball with its trail */}
+      <path d="M70 150 L96 92" stroke="#22d3a6" strokeOpacity="0.35" strokeWidth="10" strokeLinecap="round" />
+      <circle cx="98" cy="88" r="8" fill="#fff" />
+      <circle cx="98" cy="88" r="14" fill="#22d3a6" fillOpacity="0.25" />
+      {/* Paddle */}
+      <rect x="46" y="158" width="64" height="12" rx="6" fill="#7c3aed" />
+      <rect x="50" y="160" width="56" height="3" rx="1.5" fill="#fff" fillOpacity="0.45" />
+    </svg>
+  );
+};
+
+const Sling: Art = () => (
+  <svg viewBox="0 0 200 200" aria-hidden>
+    <defs>
+      <radialGradient id="sl-o" cx="0.35" cy="0.35" r="0.7">
+        <stop offset="0" stopColor="#fff" />
+        <stop offset="0.35" stopColor="#5eead4" />
+        <stop offset="1" stopColor="#0d9488" />
+      </radialGradient>
+    </defs>
+    <rect x="0" y="168" width="200" height="32" fill="#0b1020" fillOpacity="0.5" />
+    {/* Crates */}
+    <rect x="128" y="128" width="40" height="40" rx="3" fill="#b45309" />
+    <path d="M128 128 L168 168 M168 128 L128 168" stroke="#78350f" strokeWidth="4" />
+    <rect x="136" y="96" width="24" height="32" rx="3" fill="#94a3b8" />
+    {/* Orbs */}
+    <circle cx="148" cy="76" r="14" fill="url(#sl-o)" />
+    <circle cx="148" cy="76" r="22" fill="#5eead4" fillOpacity="0.18" />
+    <circle cx="112" cy="46" r="10" fill="url(#sl-o)" />
+    {/* Flight path */}
+    <path d="M52 112 Q88 40 140 70" stroke="#fff" strokeOpacity="0.5" strokeWidth="3" strokeDasharray="2 9" fill="none" strokeLinecap="round" />
+    {/* Sling */}
+    <path d="M44 168 L44 132 L30 104 M44 132 L58 104" stroke="#a16207" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M30 104 Q36 120 46 116 Q54 120 58 104" stroke="#f43f5e" strokeWidth="3" fill="none" />
+    <circle cx="46" cy="116" r="8" fill="#e2e8f0" />
+  </svg>
+);
+
+const Darts: Art = () => {
+  const rings = [
+    [78, "#0b1020"],
+    [74, "#f43f5e"],
+    [68, "#0b1020"],
+    [46, "#22d3a6"],
+    [41, "#0b1020"],
+    [12, "#22d3a6"],
+    [5, "#f43f5e"],
+  ] as const;
+  return (
+    <svg viewBox="0 0 200 200" aria-hidden>
+      <circle cx="100" cy="104" r="86" fill="#fff" fillOpacity="0.08" />
+      {rings.map(([r, c]) => (
+        <circle key={r} cx="100" cy="104" r={r} fill={c} />
+      ))}
+      {Array.from({ length: 10 }, (_, i) => {
+        const a = (i * 36 * Math.PI) / 180;
+        return <line key={i} x1={100 + 12 * Math.cos(a)} y1={104 + 12 * Math.sin(a)} x2={100 + 74 * Math.cos(a)} y2={104 + 74 * Math.sin(a)} stroke="#f8fafc" strokeOpacity="0.35" strokeWidth="1.5" />;
+      })}
+      {/* A dart in the treble */}
+      <g transform="rotate(-35 100 62)">
+        <rect x="98" y="62" width="4" height="10" fill="#cbd5e1" />
+        <rect x="96" y="20" width="8" height="42" rx="3" fill="#7c3aed" />
+        <path d="M100 20 L88 2 L100 10 L112 2 Z" fill="#facc15" />
+      </g>
+    </svg>
+  );
+};
+
+const Penalty: Art = () => (
+  <svg viewBox="0 0 200 200" aria-hidden>
+    {/* Net */}
+    <rect x="22" y="44" width="156" height="78" fill="#fff" fillOpacity="0.06" />
+    {Array.from({ length: 13 }, (_, i) => (
+      <line key={`v${i}`} x1={22 + i * 13} y1="44" x2={22 + i * 13} y2="122" stroke="#fff" strokeOpacity="0.15" />
+    ))}
+    {Array.from({ length: 6 }, (_, i) => (
+      <line key={`h${i}`} x1="22" y1={44 + i * 13} x2="178" y2={44 + i * 13} stroke="#fff" strokeOpacity="0.15" />
+    ))}
+    <path d="M22 122 L22 44 L178 44 L178 122" stroke="#fff" strokeWidth="6" fill="none" strokeLinejoin="round" />
+    {/* Keeper diving */}
+    <g transform="rotate(-28 70 92)">
+      <rect x="52" y="78" width="46" height="18" rx="9" fill="#f59e0b" />
+      <circle cx="104" cy="86" r="8" fill="#fde68a" />
+      <circle cx="44" cy="86" r="7" fill="#22d3a6" />
+    </g>
+    {/* Ball heading for the top corner */}
+    <path d="M110 176 Q140 120 158 62" stroke="#fff" strokeOpacity="0.4" strokeWidth="3" strokeDasharray="2 8" fill="none" strokeLinecap="round" />
+    <circle cx="158" cy="60" r="11" fill="#fff" />
+    <path d="M158 51 l5 4 -2 6 -6 0 -2 -6 z" fill="#0b1020" />
+    <ellipse cx="100" cy="184" rx="90" ry="6" fill="#16a34a" fillOpacity="0.5" />
+  </svg>
+);
+
 export type PosterKey =
   | "chessbot"
   | "drafts"
@@ -385,6 +495,10 @@ export type PosterKey =
   | "sudoku"
   | "slide"
   | "pool"
+  | "bricks"
+  | "sling"
+  | "darts"
+  | "penalty"
   | "ludo"
   | "football"
   | "trophy";
@@ -400,6 +514,10 @@ export const POSTER_ART: Record<PosterKey, Art> = {
   sudoku: Sudoku,
   slide: Slide,
   pool: Pool,
+  bricks: Bricks,
+  sling: Sling,
+  darts: Darts,
+  penalty: Penalty,
   ludo: Ludo,
   football: Football,
   trophy: Trophy,
@@ -417,6 +535,10 @@ export const POSTER_THEME: Record<PosterKey, { bg: string; light: string }> = {
   sudoku: { bg: "linear-gradient(160deg,#6d28d9 0%,#312e81 60%,#0b1020 100%)", light: "#22d3a6" },
   slide: { bg: "linear-gradient(160deg,#0d9488 0%,#134e4a 60%,#03201d 100%)", light: "#5eead4" },
   pool: { bg: "linear-gradient(160deg,#047857 0%,#064e3b 55%,#021a14 100%)", light: "#a7f3d0" },
+  bricks: { bg: "linear-gradient(160deg,#be123c 0%,#4c0519 55%,#0b1020 100%)", light: "#22d3a6" },
+  sling: { bg: "linear-gradient(160deg,#0e7490 0%,#164e63 55%,#0b1020 100%)", light: "#fde68a" },
+  darts: { bg: "linear-gradient(160deg,#334155 0%,#1e1b4b 55%,#0b1020 100%)", light: "#f43f5e" },
+  penalty: { bg: "linear-gradient(160deg,#15803d 0%,#14532d 55%,#0b1020 100%)", light: "#fef08a" },
   ludo: { bg: "linear-gradient(160deg,#db2777 0%,#7c3aed 55%,#1e1b4b 100%)", light: "#fde047" },
   football: { bg: "linear-gradient(160deg,#16a34a 0%,#14532d 55%,#0b1020 100%)", light: "#bbf7d0" },
   trophy: { bg: "linear-gradient(160deg,#7c3aed 0%,#312e81 55%,#0b1020 100%)", light: "#facc15" },
