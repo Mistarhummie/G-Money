@@ -366,7 +366,7 @@ export function replay(seed: number, stage: number, actions: Action[], end: numb
 // ---------------------------------------------------------------- two players
 
 /**
- * Two players take turns: side 0 kicks first while side 1 keeps, then they swap, five kicks each and
+ * Two players take turns: side 1 kicks first while side 0 keeps (so side 0, who moves first, picks a dive), then they swap, five kicks each and
  * then sudden death (up to ten each, then a draw).
  *
  * Each kick is three moves, so the keeper's choice stays secret until the ball is struck:
@@ -416,7 +416,7 @@ export type PenaltyMatch = {
 };
 
 export function replayMatch(seed: number, moves: string[]): PenaltyMatch | null {
-  const m: PenaltyMatch = { kicks: [], goals: [0, 0], step: 0, pending: {}, kicker: 0, keeper: 1, over: false, winner: null };
+  const m: PenaltyMatch = { kicks: [], goals: [0, 0], step: 0, pending: {}, kicker: 1, keeper: 0, over: false, winner: null };
   for (const mv of moves) {
     if (m.over) return null;
     if (m.step === 0) {

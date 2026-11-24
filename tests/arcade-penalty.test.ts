@@ -88,8 +88,8 @@ describe("penalty, two players", () => {
     expect(replayMatch(1, [`c:${c}`, "k:100:50", `r:1:${secret(1)}`])).toBeNull(); // revealed a different zone
     const m = replayMatch(1, [`c:${c}`, "k:100:50", `r:0:${secret(1)}`])!;
     expect(m.kicks).toHaveLength(1);
-    expect(m.kicker).toBe(1);
-    expect(m.keeper).toBe(0);
+    expect(m.kicker).toBe(0);
+    expect(m.keeper).toBe(1);
   });
 
   it("saves when the keeper picks the ball's zone, swaps roles, and ends 3–0", () => {
@@ -98,7 +98,7 @@ describe("penalty, two players", () => {
     for (let k = 0; k < 6; k++) {
       const sec = secret(100 + k);
       const { dx, dy } = pvpError(sec);
-      // Side 0 shoots safe into the low centre-left; side 1 keeps... side 1 always shoots at the keeper's zone.
+      // Side 1 kicks first and the keeper always guesses wrong; side 0 always shoots into the keeper's zone.
       const aim = k % 2 === 0 ? [140, 60] : [366, 60];
       const landZone = zoneOf(aim[0] + dx, Math.max(0, aim[1] + dy));
       const zone = k % 2 === 0 ? (landZone + 1) % 3 : landZone;
@@ -107,9 +107,9 @@ describe("penalty, two players", () => {
     }
     const m = replayMatch(1, moves)!;
     expect(saves).toBe(3);
-    expect(m.goals).toEqual([3, 0]);
+    expect(m.goals).toEqual([0, 3]);
     expect(m.over).toBe(true);
-    expect(m.winner).toBe(0);
+    expect(m.winner).toBe(1);
     expect(replayMatch(1, [...moves, `c:${commitment(0, secret(9))}`])).toBeNull();
   });
 });

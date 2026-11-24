@@ -28,7 +28,7 @@ function randomSecret(): string {
 }
 
 /**
- * Two-player penalty shootout. Side 0 kicks first. The keeper picks a zone in secret (only a
+ * Two-player penalty shootout. Side 1 kicks first (side 0 opens by picking a dive). The keeper picks a zone in secret (only a
  * fingerprint goes to the server), the kicker shoots, then the keeper's screen reveals the pick.
  */
 export default function PenaltyPvp({ seed, moves, mySide, names, onMove, disabled }: PvpBoardProps) {

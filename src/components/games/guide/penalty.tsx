@@ -63,7 +63,7 @@ const guide: Guide = {
     {
       title: "Playing someone online",
       body: [
-        "Online, one of you kicks while the other keeps, and you swap every kick. The player listed first kicks first.",
+        "Online, one of you kicks while the other keeps, and you swap every kick. The player listed second takes the first kick.",
         "The keeper picks one of six zones to dive to (low or high; left, centre or right). The pick is locked in secret before the kick, so the kicker can't see it.",
         "The kicker then aims and shoots. The ball lands very close to the aim point, but not exactly, so aiming right at the post can miss.",
         "If the ball goes into the zone the keeper picked, it's saved, except in the very top corners, which no keeper reaches.",
