@@ -68,7 +68,7 @@ const guide: Guide = {
         "The kicker then aims and shoots. The ball lands very close to the aim point, but not exactly, so aiming right at the post can miss.",
         "If the ball goes into the zone the keeper picked, it's saved, except in the very top corners, which no keeper reaches.",
         "Keep the match open on the same phone or browser until your pick is revealed (it happens by itself straight after the kick).",
-        "Each move has a 2 minute clock. Online matches are free.",
+        "Each move has a 2 minute clock.",
       ],
       picture: ZonesPicture,
     },
